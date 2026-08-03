@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#09090b" />
+  <title>Fight Vault — Kickboxing Technique Library</title>
+  <style>
+    :root {
+      --bg: #08090d;
+      --bg-soft: #101118;
+      --panel: rgba(255,255,255,.075);
+      --panel-strong: rgba(255,255,255,.11);
+      --stroke: rgba(255,255,255,.12);
+      --stroke-soft: rgba(255,255,255,.07);
+      --text: #f7f7fb;
+      --muted: #9ea2b2;
+      --accent: #ff4d5f;
+      --accent-2: #ff8a45;
+      --success: #51d88a;
+      --warning: #ffc857;
+      --danger: #ff5c6c;
+      --shadow: 0 25px 70px rgba(0,0,0,.38);
+      --radius: 24px;
+      --radius-sm: 16px;
+      --blur: blur(22px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 10%, rgba(255,77,95,.18), transparent 26%),
+        radial-gradient(circle at 90% 20%, rgba(255,138,69,.12), transparent 22%),
+        linear-gradient(180deg, #08090d 0%, #0b0c12 45%, #07080b 100%);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow-x: hidden;
+    }
+
+    button, input, textarea, select { font: inherit; }
+    button { color: inherit; }
+    a { color: inherit; }
+
+    .ambient {
+      position: fixed;
+      inset: auto;
+      border-radius: 999px;
+      filter: blur(90px);
+      pointer-events: none;
+      opacity: .35;
+      z-index: -1;
+      animation: drift 16s ease-in-out infinite alternate;
+    }
+    .ambient.one { width: 280px; height: 280px; background: #ff4057; top: 8%; left: -100px; }
+    .ambient.two { width: 240px; height: 240px; background: #ff8a45; bottom: 18%; right: -100px; animation-delay: -5s; }
+    @keyframes drift { to { transform: translate3d(40px, 55px, 0) scale(1.15); } }
+
+    .app-shell {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+      display: none;
+    }
+
+    .main {
+      width: 100%;
+      padding: 18px 16px calc(104px + var(--safe-bottom));
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      padding: 10px 0;
+      backdrop-filter: blur(18px);
+      background: linear-gradient(180deg, rgba(8,9,13,.94), rgba(8,9,13,.42), transparent);
+    }
+
+    .brand {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-weight: 800;
+      letter-spacing: -.03em;
+    }
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 15px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 12px 30px rgba(255,77,95,.28), inset 0 1px 0 rgba(255,255,255,.35);
+      font-size: 22px;
+    }
+    .brand small { display:block; color: var(--muted); font-size: 11px; letter-spacing: .14em; margin-top: 1px; }
+
+    .icon-btn, .btn {
+      border: 1px solid var(--stroke);
+      background: var(--panel);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+      transition: transform .2s ease, border-color .2s ease, background .2s ease, box-shadow .2s ease;
+      cursor: pointer;
+    }
+    .icon-btn:hover, .btn:hover { transform: translateY(-2px); border-color: rgba(255,255,255,.22); }
+    .icon-btn:active, .btn:active { transform: scale(.97); }
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 15px;
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+    }
+    .btn {
+      border-radius: 15px;
+      padding: 12px 16px;
+      font-weight: 750;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+    }
+    .btn.primary {
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 12px 32px rgba(255,77,95,.24), inset 0 1px 0 rgba(255,255,255,.3);
+    }
+    .btn.ghost { background: rgba(255,255,255,.045); }
+    .btn.full { width: 100%; }
+
+    .page { display: none; animation: pageIn .42s cubic-bezier(.2,.8,.2,1); }
+    .page.active { display: block; }
+    @keyframes pageIn { from { opacity: 0; transform: translateY(12px) scale(.992); } }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 24px;
+      border-radius: 28px;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.12), rgba(255,255,255,.035)),
+        radial-gradient(circle at 80% 20%, rgba(255,87,87,.28), transparent 38%);
+      border: 1px solid rgba(255,255,255,.14);
+      backdrop-filter: var(--blur);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 180px; height: 180px;
+      border: 28px solid rgba(255,255,255,.035);
+      border-radius: 999px;
+      right: -55px; top: -55px;
+    }
+    .eyebrow {
+      color: #ff9e8e;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+      font-weight: 800;
+      font-size: 11px;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: clamp(30px, 8vw, 58px); line-height: .98; margin-bottom: 14px; letter-spacing: -.055em; }
+    h2 { font-size: clamp(23px, 5vw, 34px); letter-spacing: -.04em; margin-bottom: 6px; }
+    h3 { font-size: 17px; letter-spacing: -.02em; }
+    .subtle { color: var(--muted); line-height: 1.55; }
+
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 11px;
+      margin-top: 14px;
+    }
+    .stat {
+      padding: 17px;
+      border-radius: 20px;
+      background: var(--panel);
+      border: 1px solid var(--stroke-soft);
+      backdrop-filter: var(--blur);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .stat strong { font-size: 26px; letter-spacing: -.04em; display:block; }
+    .stat span { color: var(--muted); font-size: 12px; }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 28px 2px 14px;
+    }
+    .section-head p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .card-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: 1fr;
+    }
+    .technique-card {
+      position: relative;
+      overflow: hidden;
+      min-height: 235px;
+      padding: 18px;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: linear-gradient(155deg, rgba(255,255,255,.105), rgba(255,255,255,.035));
+      backdrop-filter: var(--blur);
+      box-shadow: 0 18px 45px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.05);
+      cursor: pointer;
+      transition: transform .28s ease, border-color .28s ease, box-shadow .28s ease;
+    }
+    .technique-card:hover { transform: translateY(-5px); border-color: rgba(255,255,255,.24); box-shadow: 0 26px 55px rgba(0,0,0,.3); }
+    .technique-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 85% 15%, var(--card-glow, rgba(255,77,95,.34)), transparent 32%),
+        linear-gradient(180deg, transparent 20%, rgba(0,0,0,.28));
+      pointer-events: none;
+    }
+    .technique-card > * { position: relative; z-index: 1; }
+    .tech-icon {
+      width: 64px; height: 64px;
+      display: grid; place-items: center;
+      border-radius: 21px;
+      background: rgba(255,255,255,.09);
+      border: 1px solid rgba(255,255,255,.1);
+      font-size: 31px;
+      margin-bottom: 33px;
+      transform: rotate(-4deg);
+    }
+    .pill-row { display:flex; flex-wrap:wrap; gap:7px; margin-bottom: 10px; }
+    .pill {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      border-radius: 999px;
+      padding: 7px 10px;
+      background: rgba(0,0,0,.23);
+      border: 1px solid rgba(255,255,255,.09);
+      color: #d8dae4;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .card-title { font-size: 23px; font-weight: 850; letter-spacing: -.04em; margin-bottom: 6px; }
+    .card-meta { display:flex; justify-content:space-between; align-items:center; color: var(--muted); font-size: 12px; }
+    .progress-bar { height: 5px; border-radius: 999px; background: rgba(255,255,255,.08); overflow:hidden; margin-top: 14px; }
+    .progress-bar > span { display:block; height:100%; border-radius:inherit; background: linear-gradient(90deg,var(--accent),var(--accent-2)); }
+
+    .glass-panel {
+      padding: 18px;
+      border-radius: var(--radius);
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      backdrop-filter: var(--blur);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.06);
+    }
+
+    .filters {
+      display: flex;
+      gap: 9px;
+      overflow-x: auto;
+      padding: 2px 1px 9px;
+      scrollbar-width: none;
+    }
+    .filters::-webkit-scrollbar { display:none; }
+    .filter-chip {
+      flex: 0 0 auto;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.05);
+      color: var(--muted);
+      padding: 10px 13px;
+      border-radius: 999px;
+      font-weight: 750;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .filter-chip.active { color: white; background: linear-gradient(135deg, rgba(255,77,95,.92), rgba(255,138,69,.82)); border-color: transparent; }
+
+    .search-wrap { position: relative; margin: 12px 0 14px; }
+    .search-wrap input {
+      width: 100%;
+      padding: 15px 16px 15px 45px;
+      border-radius: 17px;
+      background: rgba(255,255,255,.055);
+      color: white;
+      border: 1px solid var(--stroke);
+      outline: none;
+    }
+    .search-wrap span { position:absolute; left:16px; top:50%; transform: translateY(-50%); opacity:.55; }
+
+    .list-stack { display:grid; gap:12px; }
+    .combo-card, .journal-card {
+      padding: 17px;
+      border-radius: 21px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid var(--stroke-soft);
+      transition: .25s ease;
+    }
+    .combo-card:hover, .journal-card:hover { transform: translateY(-3px); border-color: var(--stroke); }
+    .combo-sequence { display:flex; gap:7px; overflow-x:auto; padding-bottom:4px; }
+    .combo-step { flex:0 0 auto; padding:10px 12px; border-radius:13px; background:rgba(255,255,255,.07); font-size:12px; font-weight:800; }
+    .combo-arrow { align-self:center; color:var(--muted); }
+
+    .training-stage {
+      min-height: 410px;
+      border-radius: 30px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 25px;
+      background:
+        radial-gradient(circle at 50% 25%, rgba(255,77,95,.24), transparent 33%),
+        linear-gradient(145deg, rgba(255,255,255,.09), rgba(255,255,255,.025));
+      border: 1px solid var(--stroke);
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+    .training-stage::after {
+      content:""; position:absolute; width:320px; height:320px; border-radius:50%;
+      border:1px solid rgba(255,255,255,.07); box-shadow:0 0 0 42px rgba(255,255,255,.018),0 0 0 84px rgba(255,255,255,.012);
+      animation:pulseRing 3s ease-in-out infinite;
+    }
+    @keyframes pulseRing { 50% { transform:scale(1.04); opacity:.65; } }
+    .training-content { position:relative; z-index:1; }
+    .round-timer { font-size: 66px; line-height:1; letter-spacing:-.06em; font-weight:900; margin:14px 0; }
+    .callout { font-size: clamp(27px, 8vw, 50px); font-weight:900; line-height:1.05; letter-spacing:-.05em; text-transform:uppercase; max-width:780px; }
+
+    .review-card {
+      min-height: 390px;
+      perspective: 1200px;
+    }
+    .review-inner {
+      position: relative;
+      width:100%; min-height:390px;
+      transform-style: preserve-3d;
+      transition: transform .7s cubic-bezier(.2,.8,.2,1);
+    }
+    .review-card.flipped .review-inner { transform: rotateY(180deg); }
+    .review-face {
+      position:absolute; inset:0;
+      backface-visibility:hidden;
+      border-radius:28px;
+      padding:27px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      background:linear-gradient(145deg, rgba(255,255,255,.11), rgba(255,255,255,.035));
+      border:1px solid var(--stroke);
+      box-shadow:var(--shadow);
+    }
+    .review-back { transform:rotateY(180deg); background:linear-gradient(145deg, rgba(255,77,95,.18), rgba(255,255,255,.04)); }
+
+    .form-grid { display:grid; gap:14px; }
+    .field { display:grid; gap:8px; }
+    .field label { font-size:12px; font-weight:800; color:#d8dae4; }
+    .field input, .field textarea, .field select {
+      width:100%; border-radius:15px; padding:14px 15px;
+      color:white; background:rgba(0,0,0,.22); border:1px solid var(--stroke); outline:none;
+    }
+    .field textarea { min-height:105px; resize:vertical; }
+    .field input:focus, .field textarea:focus, .field select:focus { border-color:rgba(255,110,103,.68); box-shadow:0 0 0 4px rgba(255,77,95,.1); }
+    select option { background:#11131a; }
+
+    .bottom-nav {
+      position: fixed;
+      z-index: 60;
+      left: 12px; right: 12px;
+      bottom: calc(10px + var(--safe-bottom));
+      padding: 8px;
+      display: grid;
+      grid-template-columns: repeat(5,1fr);
+      gap: 4px;
+      border-radius: 23px;
+      background: rgba(15,16,22,.78);
+      border: 1px solid rgba(255,255,255,.13);
+      backdrop-filter: blur(25px);
+      -webkit-backdrop-filter: blur(25px);
+      box-shadow: 0 20px 50px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .nav-btn {
+      border:0;
+      background:transparent;
+      color:var(--muted);
+      border-radius:16px;
+      padding:9px 4px 8px;
+      display:grid;
+      place-items:center;
+      gap:4px;
+      cursor:pointer;
+      font-size:10px;
+      font-weight:700;
+    }
+    .nav-btn .nav-icon { font-size:20px; transition:.25s ease; }
+    .nav-btn.active { color:white; background:rgba(255,255,255,.08); }
+    .nav-btn.active .nav-icon { transform:translateY(-2px) scale(1.08); }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(0,0,0,.68);
+      backdrop-filter: blur(10px);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 14px;
+    }
+    .modal-backdrop.open { display:flex; animation:fadeIn .25s ease; }
+    @keyframes fadeIn { from { opacity:0; } }
+    .modal {
+      width:min(760px,100%);
+      max-height:90vh;
+      overflow:auto;
+      border-radius:28px;
+      padding:20px;
+      background:rgba(18,19,27,.94);
+      border:1px solid var(--stroke);
+      box-shadow:0 30px 90px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.08);
+      animation:sheetUp .36s cubic-bezier(.2,.8,.2,1);
+    }
+    @keyframes sheetUp { from { transform:translateY(40px); opacity:0; } }
+    .modal-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+
+    .detail-hero {
+      min-height: 250px;
+      border-radius:27px;
+      padding:22px;
+      display:flex;
+      flex-direction:column;
+      justify-content:flex-end;
+      background: radial-gradient(circle at 75% 20%, rgba(255,111,76,.38), transparent 36%), linear-gradient(145deg, rgba(255,255,255,.12), rgba(255,255,255,.035));
+      border:1px solid var(--stroke);
+      position:relative;
+      overflow:hidden;
+    }
+    .detail-hero .big-icon { position:absolute; right:22px; top:20px; font-size:75px; filter:drop-shadow(0 18px 20px rgba(0,0,0,.25)); }
+    .detail-grid { display:grid; gap:14px; margin-top:14px; }
+    .detail-block { padding:18px; border-radius:21px; background:rgba(255,255,255,.055); border:1px solid var(--stroke-soft); }
+    .detail-block ul, .detail-block ol { color:#d8dae4; line-height:1.65; padding-left:20px; margin-bottom:0; }
+
+    .toast {
+      position:fixed; z-index:200; left:50%; bottom:calc(98px + var(--safe-bottom)); transform:translate(-50%,20px);
+      background:rgba(28,29,38,.94); border:1px solid var(--stroke); color:white; padding:12px 16px; border-radius:999px;
+      opacity:0; pointer-events:none; transition:.28s ease; box-shadow:0 15px 40px rgba(0,0,0,.45);
+    }
+    .toast.show { opacity:1; transform:translate(-50%,0); }
+
+    .empty { text-align:center; padding:38px 18px; color:var(--muted); border:1px dashed var(--stroke); border-radius:22px; }
+    body.modal-open { overflow:hidden; }
+    .action-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+    .danger-btn { color:#ff9da7; border-color:rgba(255,92,108,.28); }
+    .backup-note { padding:14px; border-radius:18px; background:rgba(255,255,255,.045); border:1px solid var(--stroke-soft); color:var(--muted); line-height:1.5; font-size:13px; }
+    @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; transition-duration:.01ms !important; } }
+
+
+    @media (min-width: 680px) {
+      .main { padding: 24px 24px 90px; }
+      .stats-grid { grid-template-columns: repeat(4,1fr); }
+      .card-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .form-grid.two { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .detail-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .modal-backdrop { align-items:center; }
+      .bottom-nav { left:50%; right:auto; transform:translateX(-50%); width:min(620px,calc(100% - 28px)); }
+    }
+
+    @media (min-width: 1024px) {
+      .app-shell { grid-template-columns: 270px 1fr; padding:18px; gap:18px; }
+      .sidebar {
+        display:flex;
+        position:sticky;
+        top:18px;
+        height:calc(100vh - 36px);
+        flex-direction:column;
+        padding:18px;
+        border-radius:28px;
+        background:rgba(255,255,255,.055);
+        border:1px solid var(--stroke);
+        backdrop-filter:var(--blur);
+        box-shadow:var(--shadow), inset 0 1px 0 rgba(255,255,255,.06);
+      }
+      .sidebar .brand { margin-bottom:28px; }
+      .side-nav { display:grid; gap:8px; }
+      .side-nav .nav-btn { grid-template-columns:32px 1fr; justify-items:start; font-size:14px; padding:12px 14px; }
+      .side-nav .nav-btn.active { background:linear-gradient(135deg, rgba(255,77,95,.2), rgba(255,138,69,.08)); border:1px solid rgba(255,109,92,.25); }
+      .sidebar-footer { margin-top:auto; padding:15px; border-radius:20px; background:linear-gradient(145deg, rgba(255,77,95,.13), rgba(255,255,255,.035)); border:1px solid var(--stroke-soft); }
+      .main { padding: 0 0 50px; }
+      .topbar { padding-top:4px; }
+      .topbar .brand { display:none; }
+      .bottom-nav { display:none; }
+      .card-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+      .hero { padding:36px; }
+      .desktop-split { display:grid; grid-template-columns:1.3fr .7fr; gap:16px; align-items:start; }
+      .toast { bottom:30px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient one"></div><div class="ambient two"></div>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">🥊</div><div>Fight Vault<small>TRAIN. RETAIN. REPEAT.</small></div></div>
+      <nav class="side-nav">
+        <button class="nav-btn active" data-page="dashboard"><span class="nav-icon">⌂</span><span>Dashboard</span></button>
+        <button class="nav-btn" data-page="library"><span class="nav-icon">▦</span><span>Technique Library</span></button>
+        <button class="nav-btn" data-page="combos"><span class="nav-icon">⛓</span><span>Combinations</span></button>
+        <button class="nav-btn" data-page="training"><span class="nav-icon">◉</span><span>Training Mode</span></button>
+        <button class="nav-btn" data-page="review"><span class="nav-icon">◆</span><span>Review Cards</span></button>
+        <button class="nav-btn" data-page="journal"><span class="nav-icon">✎</span><span>Training Journal</span></button>
+      </nav>
+      <div class="sidebar-footer">
+        <strong>Today’s focus</strong>
+        <p class="subtle" style="margin:7px 0 12px;font-size:13px">Sharp returns after every kick.</p>
+        <button class="btn primary full" data-go="training">Start session</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="brand"><div class="brand-mark">🥊</div><div>Fight Vault<small>YOUR FIGHT IQ</small></div></div>
+        <div style="display:flex;gap:9px">
+          <button class="icon-btn" id="randomBtn" title="Random technique" aria-label="Open random technique">⚡</button>
+          <button class="icon-btn" id="backupBtn" title="Backup and restore" aria-label="Backup and restore">⇩</button>
+          <button class="icon-btn" id="openAddBtn" title="Add technique" aria-label="Add technique">＋</button>
+        </div>
+      </header>
+
+      <section class="page active" id="dashboard-page">
+        <div class="hero">
+          <div class="eyebrow">Your personal fight system</div>
+          <h1>Remember every<br>weapon you learn.</h1>
+          <p class="subtle" style="max-width:610px">Save techniques, build combinations, drill them under pressure and keep notes from every session.</p>
+          <div class="hero-actions">
+            <button class="btn primary" id="heroAdd">＋ Add technique</button>
+            <button class="btn ghost" data-go="training">▶ Start training</button>
+          </div>
+        </div>
+
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <div class="desktop-split">
+          <div>
+            <div class="section-head"><div><h2>Continue learning</h2><p>Your latest techniques</p></div><button class="btn ghost" data-go="library">View all</button></div>
+            <div class="card-grid" id="recentTechniques"></div>
+          </div>
+          <div>
+            <div class="section-head"><div><h2>Review queue</h2><p>Keep these fresh</p></div></div>
+            <div class="glass-panel" id="reviewQueue"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="library-page">
+        <div class="section-head" style="margin-top:0"><div><div class="eyebrow">Technique library</div><h2>All your weapons</h2><p>Search, filter and open any technique.</p></div><button class="btn primary" id="libraryAdd">＋ Add</button></div>
+        <div class="search-wrap"><span>⌕</span><input id="searchInput" placeholder="Search jab, teep, counter..." /></div>
+        <div class="filters" id="filters"></div>
+        <div class="card-grid" id="libraryGrid"></div>
+      </section>
+
+      <section class="page" id="combos-page">
+        <div class="section-head" style="margin-top:0"><div><div class="eyebrow">Combination builder</div><h2>Link your techniques</h2><p>Turn individual skills into usable sequences.</p></div><button class="btn primary" id="openComboBtn">＋ New combo</button></div>
+        <div class="list-stack" id="comboList"></div>
+      </section>
+
+      <section class="page" id="training-page">
+        <div class="section-head" style="margin-top:0"><div><div class="eyebrow">Training mode</div><h2>Live call-outs</h2><p>Run random technique and combination prompts.</p></div></div>
+        <div class="training-stage">
+          <div class="training-content">
+            <div class="eyebrow" id="roundLabel">Ready</div>
+            <div class="round-timer" id="timer">03:00</div>
+            <div class="callout" id="callout">Tap start to begin</div>
+            <p class="subtle" id="trainingHint" style="margin:18px auto 0;max-width:460px">A new prompt appears every 8 seconds.</p>
+          </div>
+        </div>
+        <div class="glass-panel" style="margin-top:14px">
+          <div class="form-grid two">
+            <div class="field"><label>Round length</label><select id="roundLength"><option value="60">1 minute</option><option value="120">2 minutes</option><option value="180" selected>3 minutes</option><option value="300">5 minutes</option></select></div>
+            <div class="field"><label>Prompt interval</label><select id="promptInterval"><option value="5">5 seconds</option><option value="8" selected>8 seconds</option><option value="12">12 seconds</option><option value="20">20 seconds</option></select></div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px"><button class="btn primary" style="flex:1" id="startTraining">▶ Start</button><button class="btn ghost" id="skipCallout">Next</button></div>
+        </div>
+      </section>
+
+      <section class="page" id="review-page">
+        <div class="section-head" style="margin-top:0"><div><div class="eyebrow">Memory mode</div><h2>Review what you know</h2><p>Flip the card, then grade your recall.</p></div></div>
+        <div class="review-card" id="reviewCard">
+          <div class="review-inner">
+            <div class="review-face review-front">
+              <div><div class="eyebrow">Question</div><h2 id="reviewQuestion" style="margin-top:16px">Loading...</h2></div>
+              <button class="btn primary full" id="flipReview">Show answer</button>
+            </div>
+            <div class="review-face review-back">
+              <div><div class="eyebrow">Answer</div><h3 id="reviewTitle" style="margin-top:16px"></h3><p class="subtle" id="reviewAnswer"></p></div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px"><button class="btn ghost review-grade" data-grade="hard">Hard</button><button class="btn ghost review-grade" data-grade="good">Good</button><button class="btn primary review-grade" data-grade="easy">Easy</button></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="journal-page">
+        <div class="section-head" style="margin-top:0"><div><div class="eyebrow">Training journal</div><h2>Track your sessions</h2><p>Save lessons before they disappear.</p></div><button class="btn primary" id="openJournalBtn">＋ Log session</button></div>
+        <div class="list-stack" id="journalList"></div>
+      </section>
+    </main>
+  </div>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-page="dashboard"><span class="nav-icon">⌂</span><span>Home</span></button>
+    <button class="nav-btn" data-page="library"><span class="nav-icon">▦</span><span>Library</span></button>
+    <button class="nav-btn" data-page="combos"><span class="nav-icon">⛓</span><span>Combos</span></button>
+    <button class="nav-btn" data-page="training"><span class="nav-icon">◉</span><span>Train</span></button>
+    <button class="nav-btn" data-page="journal"><span class="nav-icon">✎</span><span>Journal</span></button>
+  </nav>
+
+  <div class="modal-backdrop" id="techModal">
+    <div class="modal">
+      <div class="modal-head"><div><div class="eyebrow" id="techModalEyebrow">New technique</div><h2 id="techModalTitle" style="margin:4px 0 0">Add to your vault</h2></div><button class="icon-btn close-modal" aria-label="Close">×</button></div>
+      <form id="techForm">
+        <input type="hidden" name="editId" value="" />
+        <div class="form-grid two">
+          <div class="field"><label>Technique name</label><input name="name" required placeholder="Rear body kick" /></div>
+          <div class="field"><label>Category</label><select name="category"><option>Punches</option><option>Kicks</option><option>Knees</option><option>Elbows</option><option>Defence</option><option>Footwork</option><option>Counters</option><option>Clinch</option></select></div>
+          <div class="field"><label>Stance</label><select name="stance"><option>Orthodox</option><option>Southpaw</option><option>Both</option></select></div>
+          <div class="field"><label>Confidence</label><select name="confidence"><option value="1">1 — New</option><option value="2">2 — Learning</option><option value="3" selected>3 — Comfortable</option><option value="4">4 — Sharp</option><option value="5">5 — Automatic</option></select></div>
+        </div>
+        <div class="field" style="margin-top:14px"><label>Step-by-step</label><textarea name="steps" placeholder="One step per line..."></textarea></div>
+        <div class="form-grid two" style="margin-top:14px">
+          <div class="field"><label>Key coaching points</label><textarea name="keys" placeholder="Turn the hip\nKeep rear hand high"></textarea></div>
+          <div class="field"><label>Common mistakes</label><textarea name="mistakes" placeholder="Leaning back\nDropping the hand"></textarea></div>
+        </div>
+        <div class="field" style="margin-top:14px"><label>Personal notes</label><textarea name="notes" placeholder="What your coach told you..."></textarea></div>
+        <button class="btn primary full" style="margin-top:16px" type="submit"><span id="techSubmitLabel">Save technique</span></button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="comboModal">
+    <div class="modal">
+      <div class="modal-head"><div><div class="eyebrow">Combination builder</div><h2 style="margin:4px 0 0">Create a sequence</h2></div><button class="icon-btn close-modal">×</button></div>
+      <form id="comboForm">
+        <div class="field"><label>Combination name</label><input name="name" required placeholder="Dutch pressure combo" /></div>
+        <div class="field" style="margin-top:14px"><label>Techniques in order</label><input name="sequence" required placeholder="Jab, Cross, Lead hook, Rear low kick" /></div>
+        <div class="field" style="margin-top:14px"><label>Purpose / notes</label><textarea name="purpose" placeholder="Pressure forward, finish outside the stance..."></textarea></div>
+        <button class="btn primary full" style="margin-top:16px" type="submit">Save combination</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="journalModal">
+    <div class="modal">
+      <div class="modal-head"><div><div class="eyebrow">Training journal</div><h2 style="margin:4px 0 0">Log a session</h2></div><button class="icon-btn close-modal">×</button></div>
+      <form id="journalForm">
+        <div class="form-grid two">
+          <div class="field"><label>Session title</label><input name="title" required placeholder="Monday kickboxing" /></div>
+          <div class="field"><label>Duration (minutes)</label><input name="duration" type="number" min="1" value="60" /></div>
+        </div>
+        <div class="field" style="margin-top:14px"><label>Focus</label><input name="focus" placeholder="Boxing into low kicks" /></div>
+        <div class="form-grid two" style="margin-top:14px">
+          <div class="field"><label>What went well</label><textarea name="wins"></textarea></div>
+          <div class="field"><label>Needs improvement</label><textarea name="improve"></textarea></div>
+        </div>
+        <button class="btn primary full" style="margin-top:16px" type="submit">Save session</button>
+      </form>
+    </div>
+  </div>
+
+
+  <div class="modal-backdrop" id="backupModal">
+    <div class="modal">
+      <div class="modal-head"><div><div class="eyebrow">Your data</div><h2 style="margin:4px 0 0">Backup & restore</h2></div><button class="icon-btn close-modal" aria-label="Close">×</button></div>
+      <div class="backup-note">Fight Vault stores your techniques on this browser. Export a backup before changing phones, clearing browser data, or moving the app to another device.</div>
+      <div class="action-row">
+        <button class="btn primary" id="exportData" type="button">Export backup</button>
+        <button class="btn ghost" id="importData" type="button">Import backup</button>
+      </div>
+      <input id="importFile" type="file" accept="application/json,.json" hidden />
+      <button class="btn ghost full danger-btn" id="resetData" type="button" style="margin-top:10px">Reset demo data</button>
+    </div>
+  </div>
+  <div class="modal-backdrop" id="detailModal"><div class="modal" id="detailContent"></div></div>
+  <div class="toast" id="toast">Saved</div>
+
+  <script>
+    const defaults = {
+      techniques: [
+        {id:1,name:'Jab',category:'Punches',stance:'Both',confidence:5,icon:'🥊',steps:['Push from the rear foot','Shoot the lead hand straight','Turn the knuckles over','Snap back to guard'],keys:['Keep rear hand glued to cheek','Do not overreach','Return faster than you throw'],mistakes:['Dropping the rear hand','Lifting the chin','Standing square'],notes:'Use it to blind, measure and disrupt rhythm.',review:1},
+        {id:2,name:'Rear Body Kick',category:'Kicks',stance:'Orthodox',confidence:3,icon:'🦵',steps:['Step lead foot slightly outside','Pivot on the lead foot','Rotate hip and shoulder together','Drive the shin through the target','Return directly to stance'],keys:['Stay tall','Opposite hand protects the face','Turn the supporting heel'],mistakes:['Kicking only with the leg','Leaning too far back','Stopping at the target'],notes:'Need earlier hip rotation and faster return.',review:3},
+        {id:3,name:'Check & Cross',category:'Counters',stance:'Both',confidence:3,icon:'⚡',steps:['Lift the checking leg','Turn shin toward the kick','Absorb with strong posture','Plant quickly','Fire the cross immediately'],keys:['Stay balanced on the support leg','Do not admire the check','Counter before they reset'],mistakes:['Leaning away','Planting too wide','Delayed cross'],notes:'Best when opponent repeats rear low kick.',review:2},
+        {id:4,name:'Lead Teep',category:'Kicks',stance:'Both',confidence:4,icon:'🦶',steps:['Lift the lead knee','Lean back only slightly','Extend the hip and foot','Push through the target','Retract along the same line'],keys:['Point knee at target first','Keep eyes level','Return into stance'],mistakes:['Swinging the leg','Dropping both hands','Falling forward'],notes:'Use to stop pressure and reset range.',review:2},
+        {id:5,name:'Slip Outside',category:'Defence',stance:'Both',confidence:3,icon:'↙️',steps:['Read the straight punch','Move head just outside the line','Bend through knees and hips','Keep eyes on opponent','Return with a counter'],keys:['Small movement','Weight stays under you','Hands remain active'],mistakes:['Bending at waist','Moving too far','Closing eyes'],notes:'Pair with rear cross or body hook.',review:4},
+        {id:6,name:'L-Step Exit',category:'Footwork',stance:'Both',confidence:2,icon:'↪️',steps:['Step back with rear foot','Move lead foot sideways','Pivot out on an angle','Reset stance facing opponent'],keys:['Keep stance width','Move after combination','Finish ready to strike'],mistakes:['Crossing feet','Turning back','Exiting in a straight line'],notes:'Use after pressure combinations.',review:5}
+      ],
+      combos: [
+        {id:1,name:'Dutch Pressure',sequence:['Jab','Cross','Lead hook','Rear low kick'],purpose:'Box the guard high, then finish outside the stance.'},
+        {id:2,name:'Check Return',sequence:['Check','Cross','Lead hook'],purpose:'Immediate answer after defending a low kick.'},
+        {id:3,name:'Range Breaker',sequence:['Lead teep','Jab','Rear body kick'],purpose:'Disrupt range, step in and finish to the body.'}
+      ],
+      journal: [
+        {id:1,title:'Monday kickboxing',date:new Date().toLocaleDateString(),duration:75,focus:'Boxing into low kicks',wins:'Jab-cross-low kick felt much faster.',improve:'Return to stance immediately after body kicks.'}
+      ]
+    };
+
+    const storage = {
+      available: true,
+      get(key, fallback) { try { const v=localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (_) { this.available=false; return fallback; } },
+      set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (_) { this.available=false; return false; } }
+    };
+    const clone = value => JSON.parse(JSON.stringify(value));
+    const state = {
+      techniques: storage.get('fv-techniques', clone(defaults.techniques)),
+      combos: storage.get('fv-combos', clone(defaults.combos)),
+      journal: storage.get('fv-journal', clone(defaults.journal)),
+      filter: 'All', search: '', reviewIndex: 0,
+      training: {running:false, paused:false, time:180, timerId:null, calloutId:null}
+    };
+
+    const $ = s => document.querySelector(s);
+    const $$ = s => [...document.querySelectorAll(s)];
+    const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+    const save = () => {
+      const ok=[storage.set('fv-techniques',state.techniques),storage.set('fv-combos',state.combos),storage.set('fv-journal',state.journal)].every(Boolean);
+      if(!ok) toast('Could not save in this preview. Open in Safari or Chrome.');
+      return ok;
+    };
+    const toast = msg => { const t=$('#toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1800); };
+    const lines = v => String(v ?? '').split('\n').map(x=>x.trim()).filter(Boolean);
+    const iconFor = category => ({Punches:'🥊',Kicks:'🦵',Knees:'🦿',Elbows:'💥',Defence:'🛡️',Footwork:'↪️',Counters:'⚡',Clinch:'🤼'})[category] || '🥋';
+
+    function navigate(page){
+      $$('.page').forEach(p=>p.classList.toggle('active', p.id===page+'-page'));
+      $$('.nav-btn[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+      window.scrollTo({top:0,behavior:'smooth'});
+      if(page==='review') renderReview();
+    }
+    $$('.nav-btn[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
+    $$('[data-go]').forEach(b=>b.onclick=()=>navigate(b.dataset.go));
+
+    function techniqueCard(t){
+      const glow = t.category==='Kicks'?'rgba(255,138,69,.38)':t.category==='Defence'?'rgba(76,130,255,.3)':t.category==='Footwork'?'rgba(92,220,185,.28)':'rgba(255,77,95,.34)';
+      return `<article class="technique-card" style="--card-glow:${glow}" data-tech="${t.id}">
+        <div class="tech-icon">${t.icon||iconFor(t.category)}</div>
+        <div class="pill-row"><span class="pill">${t.category}</span><span class="pill">${t.stance}</span></div>
+        <div class="card-title">${t.name}</div>
+        <div class="card-meta"><span>Confidence ${t.confidence}/5</span><span>${'●'.repeat(t.confidence)}${'○'.repeat(5-t.confidence)}</span></div>
+        <div class="progress-bar"><span style="width:${t.confidence*20}%"></span></div>
+      </article>`;
+    }
+
+    function renderAll(){
+      $('#statsGrid').innerHTML = [
+        [state.techniques.length,'Techniques'],[state.combos.length,'Combinations'],[state.techniques.filter(t=>t.confidence<3).length,'Need work'],[state.journal.length,'Sessions logged']
+      ].map(([n,l])=>`<div class="stat"><strong>${n}</strong><span>${l}</span></div>`).join('');
+
+      $('#recentTechniques').innerHTML=state.techniques.slice(-3).reverse().map(techniqueCard).join('');
+      const queue=[...state.techniques].sort((a,b)=>(a.review||0)-(b.review||0)).slice(0,3);
+      $('#reviewQueue').innerHTML=queue.map((t,i)=>`<div style="display:flex;align-items:center;gap:12px;padding:${i?'13px 0 0':'0'};${i?'border-top:1px solid rgba(255,255,255,.07);margin-top:13px':''}"><div class="tech-icon" style="width:45px;height:45px;border-radius:15px;font-size:22px;margin:0">${t.icon||iconFor(t.category)}</div><div style="flex:1"><strong>${t.name}</strong><div class="subtle" style="font-size:12px">Confidence ${t.confidence}/5</div></div><button class="icon-btn mini-review" data-review-tech="${t.id}" style="width:38px;height:38px;border-radius:13px">›</button></div>`).join('') || '<div class="empty">No techniques yet.</div>';
+
+      const cats=['All',...new Set(state.techniques.map(t=>t.category))];
+      $('#filters').innerHTML=cats.map(c=>`<button class="filter-chip ${state.filter===c?'active':''}" data-filter="${c}">${c}</button>`).join('');
+      $$('.filter-chip').forEach(b=>b.onclick=()=>{state.filter=b.dataset.filter;renderAll();});
+
+      const filtered=state.techniques.filter(t=>(state.filter==='All'||t.category===state.filter)&&t.name.toLowerCase().includes(state.search.toLowerCase()));
+      $('#libraryGrid').innerHTML=filtered.map(techniqueCard).join('')||'<div class="empty">No techniques match your search.</div>';
+
+      $('#comboList').innerHTML=state.combos.map(c=>`<div class="combo-card"><div style="display:flex;justify-content:space-between;gap:12px"><div><div class="eyebrow">Combination</div><h3 style="margin:5px 0 10px">${c.name}</h3></div><button class="icon-btn delete-combo" data-id="${c.id}" style="width:38px;height:38px;border-radius:13px">×</button></div><div class="combo-sequence">${c.sequence.map((s,i)=>`${i?'<span class="combo-arrow">→</span>':''}<span class="combo-step">${s}</span>`).join('')}</div><p class="subtle" style="margin:12px 0 0">${c.purpose||''}</p></div>`).join('')||'<div class="empty">No combinations saved.</div>';
+
+      $('#journalList').innerHTML=state.journal.map(j=>`<div class="journal-card"><div style="display:flex;justify-content:space-between;gap:12px"><div><div class="eyebrow">${j.date}</div><h3 style="margin:5px 0">${j.title}</h3><div class="subtle" style="font-size:12px">${j.duration} min · ${j.focus||'General training'}</div></div><button class="icon-btn delete-journal" data-id="${j.id}" style="width:38px;height:38px;border-radius:13px">×</button></div><div class="detail-grid"><div><strong>Win</strong><p class="subtle" style="margin:5px 0 0">${j.wins||'—'}</p></div><div><strong>Improve</strong><p class="subtle" style="margin:5px 0 0">${j.improve||'—'}</p></div></div></div>`).join('')||'<div class="empty">No sessions logged yet.</div>';
+
+      bindDynamic();
+    }
+
+    function bindDynamic(){
+      $$('[data-tech]').forEach(card=>card.onclick=()=>openDetail(Number(card.dataset.tech)));
+      $$('.mini-review').forEach(b=>b.onclick=e=>{e.stopPropagation();state.reviewIndex=Math.max(0,state.techniques.findIndex(t=>t.id===Number(b.dataset.reviewTech)));navigate('review');renderReview();});
+      $$('.delete-combo').forEach(b=>b.onclick=()=>{if(!confirm('Delete this combination?'))return;state.combos=state.combos.filter(c=>c.id!==Number(b.dataset.id));save();renderAll();toast('Combination deleted');});
+      $$('.delete-journal').forEach(b=>b.onclick=()=>{if(!confirm('Delete this training session?'))return;state.journal=state.journal.filter(j=>j.id!==Number(b.dataset.id));save();renderAll();toast('Session deleted');});
+    }
+
+    function openDetail(id){
+      const t=state.techniques.find(x=>x.id===id); if(!t)return;
+      $('#detailContent').innerHTML=`<div class="modal-head"><div></div><button class="icon-btn close-detail">×</button></div>
+      <div class="detail-hero"><div class="big-icon">${t.icon||iconFor(t.category)}</div><div class="pill-row"><span class="pill">${t.category}</span><span class="pill">${t.stance}</span><span class="pill">Confidence ${t.confidence}/5</span></div><h1 style="font-size:42px;margin:0">${t.name}</h1></div>
+      <div class="detail-grid">
+        <div class="detail-block"><h3>How to perform it</h3><ol>${(t.steps||[]).map(x=>`<li>${x}</li>`).join('')||'<li>Add your steps later.</li>'}</ol></div>
+        <div class="detail-block"><h3>Key coaching points</h3><ul>${(t.keys||[]).map(x=>`<li>${x}</li>`).join('')||'<li>No coaching points yet.</li>'}</ul></div>
+        <div class="detail-block"><h3>Common mistakes</h3><ul>${(t.mistakes||[]).map(x=>`<li>${x}</li>`).join('')||'<li>No mistakes saved.</li>'}</ul></div>
+        <div class="detail-block"><h3>Personal notes</h3><p class="subtle" style="margin-bottom:0">${t.notes||'No personal notes yet.'}</p></div>
+      </div>
+      <div class="action-row"><button class="btn primary edit-tech" type="button">Edit technique</button><button class="btn ghost danger-btn delete-tech" data-id="${t.id}" type="button">Delete</button></div>`;
+      $('#detailModal').classList.add('open');
+      $('.close-detail').onclick=()=>closeModal($('#detailModal'));
+      $('.edit-tech').onclick=()=>{closeModal($('#detailModal'));openTechniqueForm(t);};
+      $('.delete-tech').onclick=()=>{if(!confirm(`Delete ${t.name}?`))return;state.techniques=state.techniques.filter(x=>x.id!==id);save();renderAll();closeModal($('#detailModal'));toast('Technique deleted');};
+    }
+
+    const openModal=id=>{ $(id).classList.add('open'); document.body.classList.add('modal-open'); setTimeout(()=>$(id).querySelector('input,select,textarea,button')?.focus(),50); };
+    const closeModal=modal=>{ modal.classList.remove('open'); if(!$('.modal-backdrop.open')) document.body.classList.remove('modal-open'); };
+    function openTechniqueForm(t=null){
+      const form=$('#techForm'); form.reset();
+      form.elements.editId.value=t?.id||'';
+      $('#techModalEyebrow').textContent=t?'Edit technique':'New technique';
+      $('#techModalTitle').textContent=t?'Update your notes':'Add to your vault';
+      $('#techSubmitLabel').textContent=t?'Save changes':'Save technique';
+      if(t){ form.elements.name.value=t.name||''; form.elements.category.value=t.category||'Punches'; form.elements.stance.value=t.stance||'Both'; form.elements.confidence.value=t.confidence||3; form.elements.steps.value=(t.steps||[]).join('\n'); form.elements.keys.value=(t.keys||[]).join('\n'); form.elements.mistakes.value=(t.mistakes||[]).join('\n'); form.elements.notes.value=t.notes||''; }
+      openModal('#techModal');
+    }
+    ['#openAddBtn','#heroAdd','#libraryAdd'].forEach(s=>$(s).onclick=()=>openTechniqueForm());
+    $('#openComboBtn').onclick=()=>openModal('#comboModal');
+    $('#openJournalBtn').onclick=()=>openModal('#journalModal');
+    $('#backupBtn').onclick=()=>openModal('#backupModal');
+    $$('.close-modal').forEach(b=>b.onclick=()=>closeModal(b.closest('.modal-backdrop')));
+    $$('.modal-backdrop').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m)}));
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'){const m=$('.modal-backdrop.open');if(m)closeModal(m);}});
+
+    $('#techForm').onsubmit=e=>{
+      e.preventDefault(); const f=new FormData(e.target); const editId=Number(f.get('editId'));
+      const data={name:String(f.get('name')).trim(),category:f.get('category'),stance:f.get('stance'),confidence:Number(f.get('confidence')),icon:iconFor(f.get('category')),steps:lines(String(f.get('steps')||'')),keys:lines(String(f.get('keys')||'')),mistakes:lines(String(f.get('mistakes')||'')),notes:String(f.get('notes')||'').trim()};
+      if(editId){ const i=state.techniques.findIndex(t=>t.id===editId); if(i>=0) state.techniques[i]={...state.techniques[i],...data}; }
+      else state.techniques.push({id:Date.now(),...data,review:0});
+      save(); renderAll(); closeModal($('#techModal')); toast(editId?'Technique updated':'Technique saved');
+    };
+    $('#comboForm').onsubmit=e=>{
+      e.preventDefault(); const f=new FormData(e.target);
+      state.combos.unshift({id:Date.now(),name:f.get('name'),sequence:f.get('sequence').split(',').map(x=>x.trim()).filter(Boolean),purpose:f.get('purpose')});
+      save(); renderAll(); e.target.reset(); closeModal($('#comboModal')); toast('Combination saved');
+    };
+    $('#journalForm').onsubmit=e=>{
+      e.preventDefault(); const f=new FormData(e.target);
+      state.journal.unshift({id:Date.now(),title:f.get('title'),duration:f.get('duration'),focus:f.get('focus'),wins:f.get('wins'),improve:f.get('improve'),date:new Date().toLocaleDateString()});
+      save(); renderAll(); e.target.reset(); closeModal($('#journalModal')); toast('Session logged');
+    };
+
+    $('#searchInput').oninput=e=>{state.search=e.target.value;renderAll();};
+    $('#randomBtn').onclick=()=>{if(!state.techniques.length)return;openDetail(state.techniques[Math.floor(Math.random()*state.techniques.length)].id);};
+
+    function renderReview(){
+      if(!state.techniques.length){$('#reviewQuestion').textContent='Add a technique first';return;}
+      const t=state.techniques[state.reviewIndex%state.techniques.length];
+      $('#reviewCard').classList.remove('flipped');
+      $('#reviewQuestion').textContent=`Explain the key points of ${t.name}.`;
+      $('#reviewTitle').textContent=t.name;
+      $('#reviewAnswer').innerHTML=[...(t.keys||[]),...(t.steps||[]).slice(0,2)].map(x=>`• ${x}`).join('<br>') || t.notes || 'No answer saved yet.';
+    }
+    $('#flipReview').onclick=()=>$('#reviewCard').classList.add('flipped');
+    $$('.review-grade').forEach(b=>b.onclick=()=>{
+      const t=state.techniques[state.reviewIndex%state.techniques.length];
+      t.review=(t.review||0)+(b.dataset.grade==='hard'?1:b.dataset.grade==='good'?3:5);
+      if(b.dataset.grade==='easy'&&t.confidence<5)t.confidence++;
+      state.reviewIndex=(state.reviewIndex+1)%state.techniques.length;save();renderAll();renderReview();toast('Review saved');
+    });
+
+    function nextCallout(){
+      const pool=[...state.combos.map(c=>c.sequence.join(' → ')),...state.techniques.map(t=>t.name)];
+      $('#callout').animate([{opacity:0,transform:'translateY(12px)'},{opacity:1,transform:'translateY(0)'}],{duration:350,easing:'ease-out'});
+      $('#callout').textContent=pool[Math.floor(Math.random()*pool.length)]||'Add a technique';
+    }
+    function displayTime(sec){ const m=Math.floor(sec/60).toString().padStart(2,'0'); const s=(sec%60).toString().padStart(2,'0'); $('#timer').textContent=`${m}:${s}`; }
+    function stopTraining(completed=false){
+      clearInterval(state.training.timerId); clearInterval(state.training.calloutId); state.training.running=false; state.training.paused=false;
+      $('#startTraining').textContent='▶ Start'; $('#roundLabel').textContent=completed?'Complete':'Ready';
+      if(!completed){state.training.time=Number($('#roundLength').value);displayTime(state.training.time);}
+    }
+    function runTraining(){
+      state.training.running=true; state.training.paused=false; $('#startTraining').textContent='Ⅱ Pause'; $('#roundLabel').textContent='Round active'; nextCallout();
+      state.training.timerId=setInterval(()=>{state.training.time--;displayTime(Math.max(0,state.training.time));if(state.training.time<=0){stopTraining(true);$('#callout').textContent='Round complete';toast('Round complete');}},1000);
+      state.training.calloutId=setInterval(nextCallout,Number($('#promptInterval').value)*1000);
+    }
+    $('#startTraining').onclick=()=>{
+      if(state.training.running){clearInterval(state.training.timerId);clearInterval(state.training.calloutId);state.training.running=false;state.training.paused=true;$('#startTraining').textContent='▶ Resume';$('#roundLabel').textContent='Paused';return;}
+      if(!state.training.paused){state.training.time=Number($('#roundLength').value);displayTime(state.training.time);} runTraining();
+    };
+    $('#promptInterval').onchange=()=>{$('#trainingHint').textContent=`A new prompt appears every ${$('#promptInterval').value} seconds.`;if(state.training.running){clearInterval(state.training.calloutId);state.training.calloutId=setInterval(nextCallout,Number($('#promptInterval').value)*1000);}};
+    $('#roundLength').onchange=()=>{if(!state.training.running&&!state.training.paused){state.training.time=Number($('#roundLength').value);displayTime(state.training.time);}};
+    document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.training.running)$('#startTraining').click();});
+    $('#skipCallout').onclick=nextCallout;
+
+
+    $('#exportData').onclick=()=>{
+      const blob=new Blob([JSON.stringify({version:2,exportedAt:new Date().toISOString(),techniques:state.techniques,combos:state.combos,journal:state.journal},null,2)],{type:'application/json'});
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`fight-vault-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);toast('Backup exported');
+    };
+    $('#importData').onclick=()=>$('#importFile').click();
+    $('#importFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.techniques)||!Array.isArray(data.combos)||!Array.isArray(data.journal))throw new Error('Invalid backup');state.techniques=data.techniques;state.combos=data.combos;state.journal=data.journal;save();renderAll();renderReview();closeModal($('#backupModal'));toast('Backup restored');}catch(_){alert('That file is not a valid Fight Vault backup.');}e.target.value='';};
+    $('#resetData').onclick=()=>{if(!confirm('Reset everything back to the demo data? Your current data will be replaced.'))return;state.techniques=clone(defaults.techniques);state.combos=clone(defaults.combos);state.journal=clone(defaults.journal);save();renderAll();renderReview();closeModal($('#backupModal'));toast('Demo data restored');};
+
+    renderAll(); renderReview();
+    if(!storage.available) setTimeout(()=>toast('Preview mode cannot save data reliably. Open in Safari or Chrome.'),600);
+  </script>
+</body>
+</html>
