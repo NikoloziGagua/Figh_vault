@@ -1,0 +1,35 @@
+{
+  "name": "Fight Vault — Your External Fight Brain",
+  "short_name": "Fight Vault",
+  "description": "Capture coaching cues, build combinations, train hands-free, and remember what works.",
+  "id": "./",
+  "start_url": "./#today",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a0c",
+  "theme_color": "#0b0b0d",
+  "categories": ["sports", "fitness", "productivity"],
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Train now",
+      "short_name": "Train",
+      "url": "./#train",
+      "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Open vault",
+      "short_name": "Vault",
+      "url": "./#vault",
+      "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}

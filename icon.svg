@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Fight Vault</title>
+  <defs>
+    <linearGradient id="background" x1="80" y1="54" x2="424" y2="468" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff8067"/>
+      <stop offset="0.52" stop-color="#ef493a"/>
+      <stop offset="1" stop-color="#a92220"/>
+    </linearGradient>
+    <radialGradient id="shine" cx="0" cy="0" r="1" gradientTransform="translate(164 126) rotate(46) scale(282)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="white" stop-opacity=".22"/>
+      <stop offset="1" stop-color="white" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="132" fill="#111114"/>
+  <path d="M72 122c0-36 29-65 65-65h238c36 0 65 29 65 65v270c0 35-29 64-65 64H170c-54 0-98-44-98-98V122Z" fill="url(#background)"/>
+  <path d="M72 122c0-36 29-65 65-65h238c36 0 65 29 65 65v270c0 35-29 64-65 64H170c-54 0-98-44-98-98V122Z" fill="url(#shine)"/>
+  <circle cx="271" cy="251" r="132" fill="none" stroke="white" stroke-opacity=".13" stroke-width="26"/>
+  <circle cx="271" cy="251" r="78" fill="#791c1b" fill-opacity=".42" stroke="white" stroke-opacity=".17" stroke-width="14"/>
+  <path d="M176 184h70v31h-36v25h34v31h-34v54h-34V184Zm85 0h38l31 89 31-89h37l-51 141h-35l-51-141Z" fill="white"/>
+</svg>
