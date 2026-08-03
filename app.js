@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const APP_VERSION = 3;
+  const APP_VERSION = 4;
   const DB_NAME = 'fight-vault';
   const DB_VERSION = 1;
   const STORE_NAME = 'app';
@@ -18,6 +18,7 @@
     Elbows: 'rgba(238,92,111,.13)', Defence: 'rgba(101,169,255,.13)', Footwork: 'rgba(94,213,155,.12)',
     Counters: 'rgba(179,124,255,.12)', Clinch: 'rgba(90,203,194,.12)', Other: 'rgba(255,255,255,.08)'
   };
+  const INSIGHT_TYPES = ['Principle', 'Coaching cue', 'Common mistake', 'Drill', 'Combination idea', 'Review question'];
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -61,6 +62,14 @@
     const remainder = safeSeconds % 60;
     return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
   };
+  const formatTimestamp = (seconds) => {
+    if (!Number.isFinite(Number(seconds))) return 'Text';
+    const value = Math.max(0, Math.floor(Number(seconds)));
+    const hours = Math.floor(value / 3600);
+    const minutes = Math.floor((value % 3600) / 60);
+    const remainder = value % 60;
+    return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}` : `${minutes}:${String(remainder).padStart(2, '0')}`;
+  };
   const formatMinutes = (seconds) => {
     const minutes = Math.max(0, Math.round((Number(seconds) || 0) / 60));
     return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
@@ -79,6 +88,119 @@
   const techniqueName = (id) => state.techniques.find((item) => item.id === id)?.name || 'Unknown technique';
   const comboStepName = (step) => state.techniques.find((item) => item.id === step.techniqueId)?.name || step.label || 'Unknown movement';
   const comboSpokenName = (combo) => combo.steps.map(comboStepName).join(', ');
+  const sourceName = (id) => state.sources.find((item) => item.id === id)?.title || 'Unknown source';
+  const getTechniqueInsights = (id) => state.insights.filter((item) => item.status === 'connected' && item.techniqueId === id);
+  const parseTimestamp = (value) => {
+    const parts = String(value || '').trim().replace(',', '.').split(':').map(Number);
+    if (!parts.length || parts.some((part) => !Number.isFinite(part))) return null;
+    if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+    if (parts.length === 2) return (parts[0] * 60) + parts[1];
+    return parts[0];
+  };
+  const youtubeVideoId = (value) => {
+    try {
+      const url = new URL(clean(value, 1000));
+      const host = url.hostname.replace(/^www\./, '').toLowerCase();
+      if (host === 'youtu.be') return clean(url.pathname.split('/').filter(Boolean)[0], 20);
+      if (!['youtube.com', 'm.youtube.com', 'music.youtube.com'].includes(host)) return '';
+      if (url.searchParams.get('v')) return clean(url.searchParams.get('v'), 20);
+      const parts = url.pathname.split('/').filter(Boolean);
+      if (['shorts', 'embed', 'live'].includes(parts[0])) return clean(parts[1], 20);
+      return '';
+    } catch (_) {
+      return '';
+    }
+  };
+  const youtubeAt = (source, seconds = null) => {
+    try {
+      const url = new URL(source.url);
+      if (Number.isFinite(Number(seconds))) url.searchParams.set('t', `${Math.max(0, Math.floor(Number(seconds)))}s`);
+      return url.href;
+    } catch (_) {
+      return source.url;
+    }
+  };
+
+  const stripCaptionMarkup = (value) => clean(String(value || '')
+    .replace(/<\/?(?:c|v|lang)(?:\.[^ >]+)?[^>]*>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' '), 2000);
+
+  const splitUntimedText = (text) => {
+    const paragraphs = String(text || '').split(/\n\s*\n/).map((item) => stripCaptionMarkup(item)).filter(Boolean);
+    const chunks = [];
+    paragraphs.forEach((paragraph) => {
+      if (paragraph.length <= 520) {
+        chunks.push(paragraph);
+        return;
+      }
+      const sentences = paragraph.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [paragraph];
+      let current = '';
+      sentences.forEach((sentence) => {
+        if (`${current} ${sentence}`.trim().length > 520 && current) {
+          chunks.push(current.trim());
+          current = sentence;
+        } else current = `${current} ${sentence}`;
+      });
+      if (current.trim()) chunks.push(current.trim());
+    });
+    return chunks.slice(0, 5000).map((item) => ({ id: uid('segment'), startSec: null, endSec: null, text: item }));
+  };
+
+  const parseTranscript = (raw) => {
+    const transcript = String(raw || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').slice(0, 1_500_000);
+    const inputLines = transcript.split('\n');
+    const segments = [];
+    let current = null;
+    const flush = () => {
+      if (!current) return;
+      const text = stripCaptionMarkup(current.text.join(' '));
+      if (text) segments.push({ id: uid('segment'), startSec: current.startSec, endSec: current.endSec, text });
+      current = null;
+    };
+    const timePattern = '((?:\\d{1,2}:)?\\d{1,2}:\\d{2}(?:[.,]\\d{1,3})?)';
+    const arrowPattern = new RegExp(`^${timePattern}\\s*-->\\s*${timePattern}`);
+    const inlinePattern = new RegExp(`^\\[?${timePattern}\\]?\\s*(?:[-–—]\\s*)?(.*)$`);
+    inputLines.forEach((rawLine) => {
+      const line = rawLine.trim();
+      if (!line) {
+        if (current?.text.length) flush();
+        return;
+      }
+      if (/^(WEBVTT|NOTE\b|STYLE\b|REGION\b|Kind:|Language:)/i.test(line)) return;
+      const arrow = line.match(arrowPattern);
+      if (arrow) {
+        flush();
+        current = { startSec: parseTimestamp(arrow[1]), endSec: parseTimestamp(arrow[2]), text: [] };
+        return;
+      }
+      const inline = line.match(inlinePattern);
+      if (inline) {
+        flush();
+        current = { startSec: parseTimestamp(inline[1]), endSec: null, text: [] };
+        if (inline[2]) current.text.push(inline[2]);
+        return;
+      }
+      if (/^\d+$/.test(line) && !current?.text.length) return;
+      current ||= { startSec: null, endSec: null, text: [] };
+      current.text.push(line);
+    });
+    flush();
+    const timestamped = segments.some((segment) => segment.startSec !== null);
+    if (!segments.length || !timestamped) return splitUntimedText(transcript);
+    const unique = [];
+    const seen = new Set();
+    segments.forEach((segment, index) => {
+      if (segment.endSec === null && segments[index + 1] && segments[index + 1].startSec !== null) segment.endSec = segments[index + 1].startSec;
+      const key = `${segment.startSec}:${segment.text}`;
+      if (!seen.has(key)) { seen.add(key); unique.push(segment); }
+    });
+    return unique.slice(0, 10_000);
+  };
   const getWeekStart = (offset = 0) => {
     const date = startOfDay();
     const day = (date.getDay() + 6) % 7;
@@ -108,7 +230,9 @@
     techniques: [],
     combos: [],
     sessions: [],
-    reviewLog: []
+    reviewLog: [],
+    sources: [],
+    insights: []
   });
 
   const normalizeSchedule = (schedule = {}, legacyReview = 0) => ({
@@ -184,12 +308,56 @@
     }
   });
 
+  const normalizeSource = (raw = {}) => {
+    const transcriptText = String(raw.transcriptText || raw.transcript || '').slice(0, 1_500_000);
+    const suppliedSegments = Array.isArray(raw.segments) ? raw.segments : parseTranscript(transcriptText);
+    const url = safeUrl(raw.url || '');
+    return {
+      id: clean(raw.id || uid('source'), 120),
+      provider: 'youtube',
+      url,
+      videoId: clean(raw.videoId || youtubeVideoId(url), 20),
+      title: clean(raw.title || 'Untitled film source', 180),
+      creator: clean(raw.creator || '', 100),
+      topic: clean(raw.topic || '', 100),
+      transcriptText,
+      segments: suppliedSegments.map((segment) => ({
+        id: clean(segment.id || uid('segment'), 120),
+        startSec: segment.startSec !== null && segment.startSec !== '' && Number.isFinite(Number(segment.startSec)) ? Math.max(0, Number(segment.startSec)) : null,
+        endSec: segment.endSec !== null && segment.endSec !== '' && Number.isFinite(Number(segment.endSec)) ? Math.max(0, Number(segment.endSec)) : null,
+        text: clean(segment.text, 2000)
+      })).filter((segment) => segment.text).slice(0, 10_000),
+      createdAt: toIso(raw.createdAt || nowIso()),
+      updatedAt: toIso(raw.updatedAt || raw.createdAt || nowIso())
+    };
+  };
+
+  const normalizeInsight = (raw = {}, sourceIds = new Set(), techniqueIds = new Set()) => ({
+    id: clean(raw.id || uid('insight'), 120),
+    sourceId: sourceIds.has(String(raw.sourceId)) ? String(raw.sourceId) : null,
+    segmentId: raw.segmentId ? clean(raw.segmentId, 120) : null,
+    type: INSIGHT_TYPES.includes(raw.type) ? raw.type : 'Principle',
+    title: clean(raw.title || 'Untitled insight', 100),
+    body: clean(raw.body || '', 800),
+    timestampSec: raw.timestampSec !== null && raw.timestampSec !== '' && Number.isFinite(Number(raw.timestampSec)) ? Math.max(0, Number(raw.timestampSec)) : null,
+    status: ['inbox', 'connected', 'dismissed'].includes(raw.status) ? raw.status : 'inbox',
+    techniqueId: techniqueIds.has(String(raw.techniqueId)) ? String(raw.techniqueId) : null,
+    connectionType: ['coaching-point', 'primary-cue', 'notes', 'keep', 'new-technique'].includes(raw.connectionType) ? raw.connectionType : null,
+    createdAt: toIso(raw.createdAt || nowIso()),
+    updatedAt: toIso(raw.updatedAt || raw.createdAt || nowIso())
+  });
+
   const normalizeState = (raw = {}) => {
     const base = blankState();
     const techniques = Array.isArray(raw.techniques) ? raw.techniques.map(normalizeTechnique) : [];
     const uniqueTechniques = [...new Map(techniques.map((item) => [item.id, item])).values()];
     const combos = Array.isArray(raw.combos) ? raw.combos.map((item) => normalizeCombo(item, uniqueTechniques)) : [];
     const sessions = Array.isArray(raw.sessions || raw.journal) ? (raw.sessions || raw.journal).map(normalizeSession) : [];
+    const sources = Array.isArray(raw.sources) ? raw.sources.map(normalizeSource) : [];
+    const uniqueSources = [...new Map(sources.map((item) => [item.id, item])).values()];
+    const sourceIds = new Set(uniqueSources.map((item) => item.id));
+    const techniqueIds = new Set(uniqueTechniques.map((item) => item.id));
+    const insights = Array.isArray(raw.insights) ? raw.insights.map((item) => normalizeInsight(item, sourceIds, techniqueIds)).filter((item) => item.sourceId) : [];
     return {
       version: APP_VERSION,
       profile: {
@@ -220,6 +388,8 @@
       techniques: uniqueTechniques,
       combos: [...new Map(combos.map((item) => [item.id, item])).values()],
       sessions: [...new Map(sessions.map((item) => [item.id, item])).values()].sort((a, b) => dateValue(b.completedAt) - dateValue(a.completedAt)),
+      sources: uniqueSources,
+      insights: [...new Map(insights.map((item) => [item.id, item])).values()],
       reviewLog: Array.isArray(raw.reviewLog) ? raw.reviewLog.map((item) => ({
         id: clean(item.id || uid('review'), 120), techniqueId: clean(item.techniqueId, 120),
         grade: ['hard', 'good', 'easy'].includes(item.grade) ? item.grade : 'good', at: toIso(item.at || nowIso())
@@ -417,6 +587,7 @@
 
   const renderToday = () => {
     const due = getDueTechniques();
+    const insightInbox = state.insights.filter((item) => item.status === 'inbox');
     const focus = getFocusTechnique();
     const weekSeconds = state.sessions.filter((session) => withinCurrentWeek(session.completedAt)).reduce((sum, session) => sum + durationForSession(session), 0);
     const name = clean(state.profile.name, 40);
@@ -446,13 +617,14 @@
 
     const plan = [];
     if (!state.techniques.length) {
-      plan.push({ number: '01', title: 'Capture your first correction', text: 'Technique + one coaching cue · under 20 seconds', action: 'capture', label: 'Capture' });
+      plan.push({ title: 'Capture your first correction', text: 'Technique + one coaching cue · under 20 seconds', action: 'capture', label: 'Capture' });
     } else {
-      if (due.length) plan.push({ number: '01', title: `Recall ${due.length} coaching ${due.length === 1 ? 'cue' : 'cues'}`, text: `${due.slice(0, 2).map((item) => item.name).join(' · ')}${due.length > 2 ? ` +${due.length - 2}` : ''}`, action: 'review', label: 'Review' });
-      plan.push({ number: due.length ? '02' : '01', title: 'Run a smart session', text: `${state.preferences.training.rounds} rounds · ${formatMinutes(state.preferences.training.rounds * state.preferences.training.roundLength)}`, action: 'train', label: 'Build session' });
-      plan.push({ number: due.length ? '03' : '02', title: 'Capture today’s correction', text: 'Save the detail that will matter tomorrow', action: 'capture', label: 'Capture' });
+      if (due.length) plan.push({ title: `Recall ${due.length} coaching ${due.length === 1 ? 'cue' : 'cues'}`, text: `${due.slice(0, 2).map((item) => item.name).join(' · ')}${due.length > 2 ? ` +${due.length - 2}` : ''}`, action: 'review', label: 'Review' });
+      if (insightInbox.length) plan.push({ title: `Process ${insightInbox.length} film ${insightInbox.length === 1 ? 'insight' : 'insights'}`, text: 'Approve what is useful before it enters your training', action: 'film-study', label: 'Open inbox' });
+      plan.push({ title: 'Run a smart session', text: `${state.preferences.training.rounds} rounds · ${formatMinutes(state.preferences.training.rounds * state.preferences.training.roundLength)}`, action: 'train', label: 'Build session' });
+      plan.push({ title: 'Capture today’s correction', text: 'Save the detail that will matter tomorrow', action: 'capture', label: 'Capture' });
     }
-    $('#todayPlan').innerHTML = plan.map((item) => `<article class="plan-item"><span class="plan-number">${item.number}</span><div class="plan-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.text)}</small></div><button class="plan-action" type="button" data-action="${item.action}">${escapeHtml(item.label)}</button></article>`).join('');
+    $('#todayPlan').innerHTML = plan.map((item, index) => `<article class="plan-item"><span class="plan-number">${String(index + 1).padStart(2, '0')}</span><div class="plan-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.text)}</small></div><button class="plan-action" type="button" data-action="${item.action}">${escapeHtml(item.label)}</button></article>`).join('');
 
     if (due.length) {
       $('#duePreview').innerHTML = due.slice(0, 4).map((technique) => `<button class="review-preview-card" type="button" data-action="review-one" data-id="${escapeHtml(technique.id)}"><span>${categoryCode(technique.category)}</span><span><strong>${escapeHtml(technique.name)}</strong><small>${escapeHtml(technique.cue || 'Recall the key details')}</small></span><i>›</i></button>`).join('');
@@ -490,12 +662,50 @@
 
   const comboCard = (combo) => `<article class="combo-card" style="--card-tint:rgba(179,124,255,.1)"><div class="combo-card-top"><span class="category-mark large-mark">SEQ</span><button class="card-menu" type="button" data-action="edit-combo" data-id="${escapeHtml(combo.id)}" aria-label="Edit ${escapeHtml(combo.name)}">•••</button></div><div class="combo-card-body"><div class="micro-label">${combo.steps.length} STEP COMBINATION</div><h3>${escapeHtml(combo.name)}</h3><p>${escapeHtml(combo.purpose || 'No purpose saved yet.')}</p><div class="sequence-chips">${combo.steps.map((step, index) => `${index ? '<i>→</i>' : ''}<span>${escapeHtml(comboStepName(step))}</span>`).join('')}</div></div></article>`;
 
+  const sourceDuration = (source) => Math.max(0, ...source.segments.map((segment) => segment.endSec ?? segment.startSec ?? 0));
+  const sourceCard = (source) => {
+    const activeInsights = state.insights.filter((item) => item.sourceId === source.id && item.status !== 'dismissed');
+    const duration = sourceDuration(source);
+    return `<article class="source-card" role="button" tabindex="0" data-action="open-source" data-id="${escapeHtml(source.id)}" aria-label="Open film source ${escapeHtml(source.title)}"><div class="source-card-top"><span class="youtube-mark"><i>▶</i> YOUTUBE</span><span class="status-pill">${duration ? escapeHtml(formatTimestamp(duration)) : 'TEXT'}</span></div><div class="source-card-body"><div class="micro-label">${escapeHtml(source.topic || source.creator || 'FILM STUDY')}</div><h3>${escapeHtml(source.title)}</h3><p>${escapeHtml(source.creator || 'Creator not recorded')}</p><div class="source-card-meta"><span class="chip">${source.segments.length} segments</span><span class="chip">${activeInsights.length} insights</span><span class="chip">${activeInsights.filter((item) => item.status === 'connected').length} connected</span></div></div></article>`;
+  };
+
+  const insightTypeCode = (type) => ({ Principle: 'WHY', 'Coaching cue': 'CUE', 'Common mistake': 'ERR', Drill: 'DRL', 'Combination idea': 'SEQ', 'Review question': 'ASK' })[type] || 'IDEA';
+  const insightCard = (insight) => {
+    const source = state.sources.find((item) => item.id === insight.sourceId);
+    if (!source) return '';
+    return `<article class="insight-card"><span class="insight-type-mark">${insightTypeCode(insight.type)}</span><div class="insight-card-main"><div class="insight-card-head"><div><div class="micro-label">${escapeHtml(insight.type)}</div><h3>${escapeHtml(insight.title)}</h3></div>${insight.techniqueId ? `<span class="status-pill">Suggested: ${escapeHtml(techniqueName(insight.techniqueId))}</span>` : ''}</div><p>${escapeHtml(insight.body)}</p><div class="insight-source-line"><span>${escapeHtml(source.title)}</span><span>${insight.timestampSec !== null ? `@ ${escapeHtml(formatTimestamp(insight.timestampSec))}` : 'Untimed'}</span></div><div class="insight-card-actions"><button class="approve-insight" type="button" data-action="connect-insight" data-id="${escapeHtml(insight.id)}">Connect insight</button><a href="${escapeHtml(youtubeAt(source, insight.timestampSec))}" target="_blank" rel="noopener noreferrer">Watch moment ↗</a><button type="button" data-action="dismiss-insight" data-id="${escapeHtml(insight.id)}">Dismiss</button></div></div></article>`;
+  };
+
+  const renderFilmStudy = () => {
+    const search = view.search.toLowerCase();
+    const activeInsights = state.insights.filter((item) => item.status !== 'dismissed');
+    const inbox = activeInsights.filter((item) => item.status === 'inbox' && [item.title, item.body, item.type, sourceName(item.sourceId)].some((value) => String(value).toLowerCase().includes(search)));
+    const sources = state.sources.filter((source) => [source.title, source.creator, source.topic, ...source.segments.slice(0, 100).map((segment) => segment.text)].some((value) => String(value).toLowerCase().includes(search)));
+    const totalSeconds = state.sources.reduce((sum, source) => sum + sourceDuration(source), 0);
+    $('#filmSignals').innerHTML = [
+      `<div class="film-stat"><strong>${state.sources.length}</strong><span>Video sources</span></div>`,
+      `<div class="film-stat"><strong>${totalSeconds ? (totalSeconds < 60 ? `${Math.round(totalSeconds)}s` : formatMinutes(totalSeconds)) : '0m'}</strong><span>Timestamped material</span></div>`,
+      `<div class="film-stat"><strong>${activeInsights.filter((item) => item.status === 'inbox').length}</strong><span>Inbox insights</span></div>`,
+      `<div class="film-stat"><strong>${activeInsights.filter((item) => item.status === 'connected').length}</strong><span>Connected insights</span></div>`
+    ].join('');
+    const inboxTotal = activeInsights.filter((item) => item.status === 'inbox').length;
+    $('#insightInboxCount').textContent = `${inboxTotal} insight${inboxTotal === 1 ? '' : 's'}`;
+    $('#insightInbox').innerHTML = inbox.length ? inbox.map(insightCard).join('') : emptyState(inboxTotal ? 'No matching inbox insights.' : 'Your Insight Inbox is clear.', inboxTotal ? 'Try another search.' : 'Open a source and turn a useful transcript moment into an insight.');
+    $('#sourceGrid').innerHTML = sources.length ? sources.map(sourceCard).join('') : emptyState(state.sources.length ? 'No matching sources.' : 'Your film room is empty.', state.sources.length ? 'Try another search.' : 'Import a YouTube transcript to begin connecting analysis with training.', state.sources.length ? '' : 'Import film source', 'new-source');
+  };
+
   const renderVault = () => {
     $('#techniqueTabCount').textContent = state.techniques.length;
     $('#comboTabCount').textContent = state.combos.length;
+    $('#sourceTabCount').textContent = state.sources.length;
     $$('[data-vault-tab]').forEach((button) => button.classList.toggle('active', button.dataset.vaultTab === view.vaultTab));
     $('#techniqueVault').hidden = view.vaultTab !== 'techniques';
     $('#combinationVault').hidden = view.vaultTab !== 'combinations';
+    $('#filmStudyVault').hidden = view.vaultTab !== 'film-study';
+    $('#newFilmSourceButton').hidden = view.vaultTab !== 'film-study';
+    $('#newComboButton').hidden = view.vaultTab !== 'combinations';
+    $('#vaultCaptureButton').hidden = view.vaultTab !== 'techniques';
+    $('#vaultSearch').placeholder = view.vaultTab === 'film-study' ? 'Search sources, transcripts, and insights…' : view.vaultTab === 'combinations' ? 'Search combinations and movements…' : 'Search techniques, cues, notes…';
     const categories = ['All', ...new Set(state.techniques.map((item) => item.category))];
     if (!categories.includes(view.category)) view.category = 'All';
     $('#categoryFilters').innerHTML = categories.map((category) => `<button class="filter-chip ${view.category === category ? 'active' : ''}" type="button" data-action="filter-category" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`).join('');
@@ -504,6 +714,7 @@
     $('#techniqueGrid').innerHTML = techniques.length ? techniques.map(techniqueCard).join('') : emptyState(state.techniques.length ? 'No matching techniques.' : 'Your vault is empty.', state.techniques.length ? 'Try another search or category.' : 'Capture the last correction your coach gave you.', state.techniques.length ? '' : 'Capture correction', 'capture');
     const combos = state.combos.filter((item) => [item.name, item.purpose, ...item.steps.map(comboStepName)].some((value) => String(value).toLowerCase().includes(search)));
     $('#comboGrid').innerHTML = combos.length ? combos.map(comboCard).join('') : emptyState(state.combos.length ? 'No matching combinations.' : 'No combinations yet.', state.techniques.length ? 'Build a sequence from techniques already in your vault.' : 'Capture techniques first, then connect them.', state.techniques.length ? 'Build combination' : 'Capture correction', state.techniques.length ? 'new-combo' : 'capture');
+    if (view.vaultTab === 'film-study') renderFilmStudy();
   };
 
   const renderProgress = () => {
@@ -544,7 +755,10 @@
     } else {
       techniques = [...state.techniques];
     }
-    const prompts = techniques.map((item) => ({ type: 'technique', id: item.id, name: item.name, cue: item.cue, category: item.category }));
+    const prompts = techniques.map((item) => {
+      const insightCues = getTechniqueInsights(item.id).filter((insight) => insight.type !== 'Review question').map((insight) => insight.body);
+      return { type: 'technique', id: item.id, name: item.name, cue: item.cue, cueOptions: [...new Set([item.cue, ...insightCues].filter(Boolean))], category: item.category };
+    });
     const includeCombos = settings.mode === 'combinations' || (settings.combosEnabled && settings.mode !== 'techniques' && settings.mode !== 'category');
     if (includeCombos) {
       state.combos.forEach((combo) => prompts.push({ type: 'combo', id: combo.id, name: comboSpokenName(combo) || combo.name, displayName: combo.name, cue: combo.purpose, category: 'Combination' }));
@@ -711,6 +925,14 @@
           $('#openReferenceLink', panel).href = technique.mediaUrl;
           $('#openReferenceLink', panel).hidden = false;
         }
+        const linked = getTechniqueInsights(technique.id);
+        if (linked.length) {
+          $('#linkedInsights', panel).hidden = false;
+          $('#linkedInsightList', panel).innerHTML = linked.map((insight) => {
+            const source = state.sources.find((item) => item.id === insight.sourceId);
+            return `<div class="linked-insight-item"><span><strong>${escapeHtml(insight.title)}</strong><small>${escapeHtml(insight.type)} · ${escapeHtml(source?.title || 'Unknown source')}</small></span>${source ? `<a href="${escapeHtml(youtubeAt(source, insight.timestampSec))}" target="_blank" rel="noopener noreferrer">${insight.timestampSec !== null ? escapeHtml(formatTimestamp(insight.timestampSec)) : 'Open'} ↗</a>` : ''}</div>`;
+          }).join('');
+        }
         form.addEventListener('submit', async (event) => {
           event.preventDefault();
           const updated = createTechniqueFromForm(form, technique);
@@ -724,6 +946,7 @@
           if (!confirm(`Delete “${technique.name}”? It will also be removed from linked combinations.`)) return;
           state.techniques = state.techniques.filter((item) => item.id !== id);
           state.combos = state.combos.map((combo) => ({ ...combo, steps: combo.steps.filter((step) => step.techniqueId !== id) }));
+          state.insights = state.insights.map((insight) => insight.techniqueId === id ? { ...insight, techniqueId: null, status: 'inbox', connectionType: null, updatedAt: nowIso() } : insight);
           if (state.preferences.focusTechniqueId === id) state.preferences.focusTechniqueId = null;
           await save({ immediate: true });
           closeDialog();
@@ -807,6 +1030,209 @@
     });
   };
 
+  const openFilmSourceForm = () => {
+    openTemplate('filmSourceTemplate', {
+      wide: true,
+      onOpen: (panel) => {
+        const form = $('#filmSourceForm', panel);
+        $('#captionFile', panel).addEventListener('change', async (event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          if (file.size > 5_000_000) {
+            toast('That caption file is too large. Keep it under 5 MB.');
+            event.target.value = '';
+            return;
+          }
+          try {
+            form.elements.transcript.value = (await file.text()).slice(0, 1_500_000);
+            $('#captionFileState', panel).textContent = `${file.name} · ${Math.max(1, Math.round(file.size / 1024))} KB`;
+          } catch (_) {
+            toast('Fight Vault could not read that caption file.');
+          }
+        });
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const url = safeUrl(data.get('url'));
+          const videoId = youtubeVideoId(url);
+          if (!videoId) {
+            toast('Enter a valid YouTube video, Shorts, live, or youtu.be URL.');
+            form.elements.url.focus();
+            return;
+          }
+          const transcriptText = String(data.get('transcript') || '').slice(0, 1_500_000);
+          const segments = parseTranscript(transcriptText);
+          if (!segments.length) {
+            toast('No readable transcript text was found.');
+            form.elements.transcript.focus();
+            return;
+          }
+          if (state.sources.some((source) => source.videoId === videoId) && !confirm('This video is already in Film Study. Import another copy?')) return;
+          const source = normalizeSource({
+            id: uid('source'), url, videoId, title: data.get('title'), creator: data.get('creator'), topic: data.get('topic'),
+            transcriptText, segments, createdAt: nowIso(), updatedAt: nowIso()
+          });
+          state.sources.unshift(source);
+          await save({ immediate: true });
+          closeDialog();
+          view.vaultTab = 'film-study';
+          view.search = '';
+          $('#vaultSearch').value = '';
+          renderVault();
+          toast(`${source.segments.length} transcript segment${source.segments.length === 1 ? '' : 's'} imported.`);
+        });
+      }
+    });
+  };
+
+  const openSourceReader = (id) => {
+    const source = state.sources.find((item) => item.id === id);
+    if (!source) return;
+    const activeInsights = state.insights.filter((item) => item.sourceId === source.id && item.status !== 'dismissed');
+    const insightSummary = activeInsights.length ? `<section class="source-insight-summary"><div class="section-heading"><div><p class="micro-label">FROM THIS SOURCE</p><h3>Saved insights</h3></div><span class="status-pill">${activeInsights.length}</span></div><div>${activeInsights.map((insight) => `<article><span class="insight-type-mark">${insightTypeCode(insight.type)}</span><span><strong>${escapeHtml(insight.title)}</strong><small>${insight.status === 'connected' ? (insight.techniqueId ? `Connected to ${escapeHtml(techniqueName(insight.techniqueId))}` : 'Approved source insight') : 'Waiting in Insight Inbox'}</small></span>${insight.status === 'inbox' ? `<button type="button" data-reader-connect="${escapeHtml(insight.id)}">Connect</button>` : '<i>✓</i>'}</article>`).join('')}</div></section>` : '';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'source-reader';
+    wrapper.innerHTML = `<div class="dialog-head"><div><p class="micro-label">FILM SOURCE</p><h2 style="position:absolute;width:1px;height:1px;overflow:hidden">${escapeHtml(source.title)}</h2></div><button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button></div><div class="source-reader-hero"><span class="youtube-mark"><i>▶</i> YOUTUBE FILM STUDY</span><h2>${escapeHtml(source.title)}</h2><p>${escapeHtml([source.creator, source.topic].filter(Boolean).join(' · ') || 'Creator and topic not recorded')}</p><div class="source-card-meta"><span class="chip">${source.segments.length} transcript segments</span><span class="chip">${activeInsights.length} insights</span><span class="chip">${activeInsights.filter((item) => item.status === 'connected').length} connected</span></div><div class="source-reader-actions"><a class="button button-accent" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">Watch on YouTube ↗</a><button class="button button-danger" type="button" id="deleteSourceButton">Delete source</button></div></div>${insightSummary}<div class="source-reader-toolbar"><label class="search-field" for="transcriptSearch"><span aria-hidden="true">⌕</span><input id="transcriptSearch" type="search" placeholder="Search this transcript…" autocomplete="off"></label><span class="status-pill" id="transcriptResultCount"></span></div><div class="transcript-list" id="transcriptList"></div>`;
+    openDialogNode(wrapper, {
+      wide: true,
+      onOpen: (panel) => {
+        const renderSegments = () => {
+          const search = $('#transcriptSearch', panel).value.trim().toLowerCase();
+          const matching = source.segments.filter((segment) => segment.text.toLowerCase().includes(search));
+          const visible = matching.slice(0, 750);
+          $('#transcriptResultCount', panel).textContent = matching.length > visible.length ? `Showing ${visible.length} of ${matching.length}` : `${matching.length} segment${matching.length === 1 ? '' : 's'}`;
+          $('#transcriptList', panel).innerHTML = visible.length ? visible.map((segment) => {
+            const timestamp = segment.startSec !== null ? formatTimestamp(segment.startSec) : 'Text';
+            const timeElement = segment.startSec !== null ? `<a class="segment-time" href="${escapeHtml(youtubeAt(source, segment.startSec))}" target="_blank" rel="noopener noreferrer" aria-label="Watch at ${escapeHtml(timestamp)}">${escapeHtml(timestamp)}</a>` : '<span class="segment-time">Text</span>';
+            return `<article class="transcript-segment">${timeElement}<p>${escapeHtml(segment.text)}</p><button class="segment-insight-button" type="button" data-source-insight="${escapeHtml(segment.id)}">＋ Insight</button></article>`;
+          }).join('') : emptyState('No transcript matches.', 'Try another search term.');
+        };
+        renderSegments();
+        $$('[data-reader-connect]', panel).forEach((button) => button.addEventListener('click', () => openConnectInsight(button.dataset.readerConnect)));
+        $('#transcriptSearch', panel).addEventListener('input', renderSegments);
+        $('#transcriptList', panel).addEventListener('click', (event) => {
+          const button = event.target.closest('[data-source-insight]');
+          if (button) openInsightForm(source.id, button.dataset.sourceInsight);
+        });
+        $('#deleteSourceButton', panel).addEventListener('click', async () => {
+          if (!confirm(`Delete “${source.title}” and all insights created from it? Connected technique text will remain.`)) return;
+          state.sources = state.sources.filter((item) => item.id !== source.id);
+          state.insights = state.insights.filter((item) => item.sourceId !== source.id);
+          await save({ immediate: true });
+          closeDialog();
+          renderVault();
+          toast('Film source deleted.');
+        });
+      }
+    });
+  };
+
+  const openInsightForm = (sourceId, segmentId) => {
+    const source = state.sources.find((item) => item.id === sourceId);
+    const segment = source?.segments.find((item) => item.id === segmentId);
+    if (!source || !segment) return;
+    openTemplate('insightFormTemplate', {
+      onOpen: (panel) => {
+        const form = $('#insightForm', panel);
+        form.elements.sourceId.value = source.id;
+        form.elements.segmentId.value = segment.id;
+        form.elements.timestampSec.value = segment.startSec ?? '';
+        const words = segment.text.replace(/[.!?]+$/g, '').split(/\s+/).slice(0, 9).join(' ');
+        form.elements.title.value = clean(words, 100);
+        form.elements.body.value = clean(segment.text, 800);
+        $('#insightSourceQuote', panel).innerHTML = `<strong>${escapeHtml(source.title)} · ${segment.startSec !== null ? escapeHtml(formatTimestamp(segment.startSec)) : 'Untimed'}</strong>${escapeHtml(segment.text)}`;
+        $('#insightTechniqueSelect', panel).innerHTML = '<option value="">No suggested technique</option>' + state.techniques.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} · ${escapeHtml(item.category)}</option>`).join('');
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const sourceIds = new Set(state.sources.map((item) => item.id));
+          const techniqueIds = new Set(state.techniques.map((item) => item.id));
+          const insight = normalizeInsight({
+            id: uid('insight'), sourceId: source.id, segmentId: segment.id, type: data.get('type'), title: data.get('title'), body: data.get('body'),
+            timestampSec: segment.startSec, status: 'inbox', techniqueId: data.get('techniqueId') || null, createdAt: nowIso(), updatedAt: nowIso()
+          }, sourceIds, techniqueIds);
+          state.insights.unshift(insight);
+          await save({ immediate: true });
+          closeDialog();
+          view.vaultTab = 'film-study';
+          renderVault();
+          toast('Insight saved for approval.');
+        });
+      }
+    });
+  };
+
+  const openConnectInsight = (id) => {
+    const insight = state.insights.find((item) => item.id === id && item.status === 'inbox');
+    const source = insight ? state.sources.find((item) => item.id === insight.sourceId) : null;
+    if (!insight || !source) return;
+    openTemplate('connectInsightTemplate', {
+      onOpen: (panel) => {
+        const form = $('#connectInsightForm', panel);
+        form.elements.insightId.value = insight.id;
+        $('#insightConnectPreview', panel).innerHTML = `<strong>${escapeHtml(insight.title)} · ${escapeHtml(insight.type)}</strong>${escapeHtml(insight.body)}<br><small>${escapeHtml(source.title)}${insight.timestampSec !== null ? ` · ${escapeHtml(formatTimestamp(insight.timestampSec))}` : ''}</small>`;
+        $('#connectTechniqueSelect', panel).innerHTML = state.techniques.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} · ${escapeHtml(item.category)}</option>`).join('');
+        if (insight.techniqueId && state.techniques.some((item) => item.id === insight.techniqueId)) form.elements.techniqueId.value = insight.techniqueId;
+        if (!state.techniques.length) form.elements.action.value = 'new-technique';
+        const updateConnectionFields = () => {
+          const createsNew = form.elements.action.value === 'new-technique';
+          $('#connectTechniqueField', panel).hidden = createsNew || form.elements.action.value === 'keep';
+          $('#newTechniqueNameField', panel).hidden = !createsNew;
+          if (createsNew) form.elements.newTechniqueName.value ||= insight.title;
+        };
+        updateConnectionFields();
+        form.elements.action.addEventListener('change', updateConnectionFields);
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const action = data.get('action');
+          let technique = null;
+          if (action === 'new-technique') {
+            const name = clean(data.get('newTechniqueName') || insight.title, 80);
+            if (!name) { toast('Name the new technique first.'); return; }
+            technique = normalizeTechnique({ id: uid('tech'), name, category: 'Other', stance: state.profile.stance === 'Switch' ? 'Both' : state.profile.stance, confidence: 1, cue: insight.body, createdAt: nowIso(), updatedAt: nowIso(), schedule: normalizeSchedule() });
+            state.techniques.unshift(technique);
+          } else if (action !== 'keep') {
+            technique = state.techniques.find((item) => item.id === data.get('techniqueId'));
+            if (!technique) { toast('Choose a technique for this connection.'); return; }
+          }
+          if (technique) {
+            if (action === 'coaching-point' && !technique.keys.includes(insight.body)) technique.keys.push(insight.body);
+            if (action === 'primary-cue') {
+              if (technique.cue && technique.cue !== insight.body && !technique.keys.includes(technique.cue)) technique.keys.unshift(technique.cue);
+              technique.cue = insight.body;
+            }
+            if (action === 'notes') {
+              const attribution = `${insight.body}\n— ${source.title}${insight.timestampSec !== null ? ` @ ${formatTimestamp(insight.timestampSec)}` : ''}`;
+              technique.notes = clean([technique.notes, attribution].filter(Boolean).join('\n\n'), 2000);
+            }
+            technique.schedule.dueAt = nowIso();
+            technique.updatedAt = nowIso();
+          }
+          insight.status = 'connected';
+          insight.techniqueId = technique?.id || null;
+          insight.connectionType = action;
+          insight.updatedAt = nowIso();
+          await save({ immediate: true });
+          closeDialog();
+          renderVault();
+          renderToday();
+          toast(technique ? `Insight connected to ${technique.name}.` : 'Insight approved in Film Study.');
+        });
+      }
+    });
+  };
+
+  const dismissInsight = async (id) => {
+    const insight = state.insights.find((item) => item.id === id);
+    if (!insight) return;
+    insight.status = 'dismissed';
+    insight.updatedAt = nowIso();
+    await save({ immediate: true });
+    renderVault();
+    toast('Insight dismissed.');
+  };
+
   const openFocusDialog = () => {
     const wrapper = document.createElement('div');
     wrapper.className = 'dialog-form';
@@ -862,7 +1288,8 @@
     $('#reviewCategory', panel).textContent = `${technique.category} · ${technique.stance}`;
     $('#reviewQuestion', panel).textContent = `What makes your ${technique.name} work?`;
     $('#reviewCue', panel).textContent = technique.cue || 'No coaching cue saved yet.';
-    $('#reviewSteps', panel).innerHTML = [...technique.keys, ...technique.steps].slice(0, 6).map((item) => `<li>${escapeHtml(item)}</li>`).join('') || '<li>Open this technique later and add the key steps.</li>';
+    const linkedInsightAnswers = getTechniqueInsights(technique.id).map((insight) => insight.body);
+    $('#reviewSteps', panel).innerHTML = [...new Set([...technique.keys, ...linkedInsightAnswers, ...technique.steps])].slice(0, 8).map((item) => `<li>${escapeHtml(item)}</li>`).join('') || '<li>Open this technique later and add the key steps.</li>';
     $('#memoryAnswer', panel).hidden = true;
     $('#showReviewAnswer', panel).hidden = false;
     $('#reviewGrades', panel).hidden = true;
@@ -961,9 +1388,10 @@
     training.prompts.push({ type: prompt.type, id: prompt.id, at: nowIso() });
     $('#calloutContext').textContent = prompt.type === 'combo' ? (prompt.displayName || 'COMBINATION') : prompt.category;
     $('#stageCallout').textContent = prompt.name;
-    $('#stageCue').textContent = prompt.cue || (prompt.type === 'combo' ? 'Flow through the sequence, then reset cleanly.' : 'Stay balanced and return ready.');
+    const cue = prompt.cueOptions?.length ? prompt.cueOptions[Math.floor(Math.random() * prompt.cueOptions.length)] : prompt.cue;
+    $('#stageCue').textContent = cue || (prompt.type === 'combo' ? 'Flow through the sequence, then reset cleanly.' : 'Stay balanced and return ready.');
     $('#stageCallout').animate?.([{ opacity: 0.25, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 240, easing: 'ease-out' });
-    speak(prompt.name, prompt.cue);
+    speak(prompt.name, cue);
   };
 
   const requestWakeLock = async () => {
@@ -1278,6 +1706,8 @@
     $('#vaultCaptureButton').addEventListener('click', openQuickCapture);
     $('#heroTrainButton').addEventListener('click', () => { location.hash = '#train'; });
     $('#newComboButton').addEventListener('click', () => openComboForm());
+    $('#newFilmSourceButton').addEventListener('click', openFilmSourceForm);
+    $('#filmImportButton').addEventListener('click', openFilmSourceForm);
     $('#reviewAllButton').addEventListener('click', () => openReview());
     $('#editFocusButton').addEventListener('click', openFocusDialog);
     $('#customizePlanButton').addEventListener('click', () => { location.hash = '#train'; });
@@ -1349,9 +1779,14 @@
       if (action === 'review') openReview();
       if (action === 'review-one') openReview([trigger.dataset.id]);
       if (action === 'train') location.hash = '#train';
+      if (action === 'film-study') { view.vaultTab = 'film-study'; if (view.route === 'vault') renderVault(); else location.hash = '#vault'; }
       if (action === 'new-combo') openComboForm();
+      if (action === 'new-source') openFilmSourceForm();
       if (action === 'edit-technique') openTechniqueForm(trigger.dataset.id);
       if (action === 'edit-combo') openComboForm(trigger.dataset.id);
+      if (action === 'open-source') openSourceReader(trigger.dataset.id);
+      if (action === 'connect-insight') openConnectInsight(trigger.dataset.id);
+      if (action === 'dismiss-insight') dismissInsight(trigger.dataset.id);
       if (action === 'filter-category') { view.category = trigger.dataset.category; renderVault(); }
     });
 

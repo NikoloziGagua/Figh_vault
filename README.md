@@ -5,12 +5,14 @@ Fight Vault is a local-first training companion for combat-sports athletes. It t
 ## What it does
 
 - Captures a technique and coaching cue in a few seconds, with optional browser dictation.
+- Imports copied YouTube transcripts plus `.txt`, `.srt`, and `.vtt` caption files into a searchable Film Study library.
+- Preserves transcript timestamps, creates an approval-based Insight Inbox, and connects approved analysis to techniques, reviews, and spoken training cues.
 - Builds combinations from linked techniques instead of duplicated text.
 - Schedules technique reviews using recall difficulty and review intervals.
 - Runs configurable rounds with spoken callouts, cue narration, rests, bells, no-repeat shuffling, and screen wake lock where supported.
 - Records reflections and uses them to update technique confidence and review timing.
 - Shows weekly work, training history, weak techniques, and the latest lesson.
-- Stores structured data in IndexedDB and migrates the original `fv-techniques`, `fv-combos`, and `fv-journal` localStorage data automatically.
+- Stores techniques, film sources, insights, and training history in IndexedDB and migrates the original `fv-techniques`, `fv-combos`, and `fv-journal` localStorage data automatically.
 - Exports and imports versioned JSON backups.
 - Works as an installable offline PWA.
 

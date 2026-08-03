@@ -126,7 +126,7 @@
         <section class="page" id="vaultPage" data-page="vault" aria-labelledby="vaultHeading" hidden>
           <div class="page-heading">
             <div><p class="eyebrow">YOUR FIGHT SYSTEM</p><h1 id="vaultHeading">The things you want to keep.</h1><p>Techniques, coaching corrections, and combinations—connected instead of scattered.</p></div>
-            <div class="page-heading-actions"><button class="button button-secondary" id="newComboButton" type="button">＋ Combination</button><button class="button button-accent" id="vaultCaptureButton" type="button">＋ Capture</button></div>
+            <div class="page-heading-actions"><button class="button button-secondary" id="newFilmSourceButton" type="button">＋ Film source</button><button class="button button-secondary" id="newComboButton" type="button">＋ Combination</button><button class="button button-accent" id="vaultCaptureButton" type="button">＋ Capture</button></div>
           </div>
 
           <div class="toolbar vault-toolbar">
@@ -134,6 +134,7 @@
             <div class="segmented" id="vaultTypeTabs" aria-label="Vault content type">
               <button type="button" data-vault-tab="techniques" class="active">Techniques <span id="techniqueTabCount">0</span></button>
               <button type="button" data-vault-tab="combinations">Combinations <span id="comboTabCount">0</span></button>
+              <button type="button" data-vault-tab="film-study">Film Study <span id="sourceTabCount">0</span></button>
             </div>
           </div>
 
@@ -143,6 +144,13 @@
           </div>
           <div id="combinationVault" hidden>
             <div class="combo-grid" id="comboGrid"></div>
+          </div>
+          <div id="filmStudyVault" hidden>
+            <div class="film-signals" id="filmSignals"></div>
+            <div class="section-heading film-section-heading"><div><p class="micro-label">WAITING FOR YOU</p><h2>Insight Inbox</h2></div><span class="status-pill" id="insightInboxCount">0 insights</span></div>
+            <div class="insight-inbox" id="insightInbox"></div>
+            <div class="section-heading section-spaced"><div><p class="micro-label">SOURCE LIBRARY</p><h2>Your film room</h2></div><button class="text-button" id="filmImportButton" type="button">＋ Add source</button></div>
+            <div class="source-grid" id="sourceGrid"></div>
           </div>
         </section>
 
@@ -323,7 +331,48 @@
       </div>
       <label class="field"><span>Reference link</span><input name="mediaUrl" type="url" placeholder="https://…"></label>
       <a class="reference-link" id="openReferenceLink" href="#" target="_blank" rel="noopener noreferrer" hidden>Open reference video or article ↗</a>
+      <section class="linked-insights" id="linkedInsights" hidden><p class="micro-label">FILM STUDY CONNECTIONS</p><div id="linkedInsightList"></div></section>
       <div class="dialog-actions split-actions"><button class="button button-danger" type="button" id="deleteTechniqueButton">Delete</button><span></span><button class="button button-secondary" type="button" data-close-dialog>Cancel</button><button class="button button-accent" type="submit">Save changes</button></div>
+    </form>
+  </template>
+
+  <template id="filmSourceTemplate">
+    <form class="dialog-form wide-form" id="filmSourceForm">
+      <div class="dialog-head"><div><p class="micro-label">FILM STUDY</p><h2>Bring an analysis video into your vault.</h2><p>Paste the transcript from YouTube or upload a caption file. Fight Vault keeps every available timestamp connected to the original video.</p></div><button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button></div>
+      <div class="form-grid two">
+        <label class="field"><span>YouTube URL</span><input name="url" type="url" required placeholder="https://youtube.com/watch?v=…"></label>
+        <label class="field"><span>Video title</span><input name="title" required maxlength="180" placeholder="How elite fighters set up the rear kick"></label>
+        <label class="field"><span>Creator or channel <small>optional</small></span><input name="creator" maxlength="100" placeholder="Channel name"></label>
+        <label class="field"><span>Topic <small>optional</small></span><input name="topic" maxlength="100" placeholder="Rear-side kicking mechanics"></label>
+      </div>
+      <label class="field"><span>Transcript</span><textarea class="transcript-input" name="transcript" required placeholder="0:00 Today we are breaking down…&#10;0:08 Notice how the cross hides the kick…"></textarea></label>
+      <div class="caption-upload-row"><label class="button button-secondary" for="captionFile">Upload .txt, .srt, or .vtt</label><input id="captionFile" type="file" accept="text/plain,.txt,.srt,.vtt,text/vtt,application/x-subrip" hidden><span id="captionFileState">No file selected</span></div>
+      <div class="format-help"><strong>Supported automatically</strong><span>YouTube copied transcripts</span><span>SRT captions</span><span>WebVTT captions</span><span>Plain text</span></div>
+      <div class="dialog-actions"><button class="button button-secondary" type="button" data-close-dialog>Cancel</button><button class="button button-accent" type="submit">Import film source</button></div>
+    </form>
+  </template>
+
+  <template id="insightFormTemplate">
+    <form class="dialog-form" id="insightForm">
+      <input name="sourceId" type="hidden"><input name="segmentId" type="hidden"><input name="timestampSec" type="hidden">
+      <div class="dialog-head"><div><p class="micro-label">CREATE INSIGHT</p><h2>Turn analysis into something trainable.</h2><p>Edit the speaker’s words into a concise idea you will understand later.</p></div><button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button></div>
+      <div class="source-quote" id="insightSourceQuote"></div>
+      <div class="form-grid two"><label class="field"><span>Insight type</span><select name="type"><option>Principle</option><option>Coaching cue</option><option>Common mistake</option><option>Drill</option><option>Combination idea</option><option>Review question</option></select></label><label class="field"><span>Short title</span><input name="title" required maxlength="100" placeholder="Hide the kick behind the cross"></label></div>
+      <label class="field"><span>Useful explanation</span><textarea name="body" required maxlength="800" placeholder="The shoulder rotation from the cross disguises the beginning of the rear kick."></textarea></label>
+      <label class="field"><span>Suggested technique <small>optional — approval still required</small></span><select name="techniqueId" id="insightTechniqueSelect"><option value="">No suggested technique</option></select></label>
+      <div class="dialog-actions"><button class="button button-secondary" type="button" data-close-dialog>Cancel</button><button class="button button-accent" type="submit">Save insight</button></div>
+    </form>
+  </template>
+
+  <template id="connectInsightTemplate">
+    <form class="dialog-form" id="connectInsightForm">
+      <input name="insightId" type="hidden">
+      <div class="dialog-head"><div><p class="micro-label">CONNECT INSIGHT</p><h2>Decide how this enters your system.</h2><p>Nothing changes your techniques until you approve the connection.</p></div><button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button></div>
+      <div class="insight-connect-preview" id="insightConnectPreview"></div>
+      <label class="field"><span>Destination</span><select name="action"><option value="coaching-point">Add as a coaching point</option><option value="primary-cue">Use as the primary coaching cue</option><option value="notes">Add to personal notes</option><option value="keep">Keep as a connected source only</option><option value="new-technique">Create a new technique</option></select></label>
+      <label class="field" id="connectTechniqueField"><span>Technique</span><select name="techniqueId" id="connectTechniqueSelect"></select></label>
+      <label class="field" id="newTechniqueNameField" hidden><span>New technique name</span><input name="newTechniqueName" maxlength="80"></label>
+      <div class="dialog-actions"><button class="button button-secondary" type="button" data-close-dialog>Cancel</button><button class="button button-accent" type="submit">Approve connection</button></div>
     </form>
   </template>
 
@@ -382,7 +431,7 @@
   <template id="dataTemplate">
     <div class="dialog-form">
       <div class="dialog-head"><div><p class="micro-label">DATA & SETTINGS</p><h2>Local-first and under your control.</h2><p>Your structured data is stored in this browser with IndexedDB. Export a backup before changing devices.</p></div><button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button></div>
-      <div class="data-actions"><button class="data-action" id="exportButton" type="button"><span>↓</span><strong>Export backup</strong><small>Download all techniques and sessions</small></button><button class="data-action" id="importButton" type="button"><span>↑</span><strong>Import backup</strong><small>Restore a Fight Vault JSON file</small></button><input id="importInput" type="file" accept="application/json,.json" hidden></div>
+      <div class="data-actions"><button class="data-action" id="exportButton" type="button"><span>↓</span><strong>Export backup</strong><small>Download techniques, film sources, insights, and sessions</small></button><button class="data-action" id="importButton" type="button"><span>↑</span><strong>Import backup</strong><small>Restore a Fight Vault JSON file</small></button><input id="importInput" type="file" accept="application/json,.json" hidden></div>
       <div class="data-status"><strong>Offline ready</strong><span id="offlineStatus">Checking app cache…</span></div>
       <button class="button button-danger button-full" id="resetButton" type="button">Delete all Fight Vault data</button>
     </div>
